@@ -1,3 +1,5 @@
+![Pylint](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml/badge.svg)
+
 # PySyslog LFC
 
 A lightweight, modular log processor with flow-based configuration.
