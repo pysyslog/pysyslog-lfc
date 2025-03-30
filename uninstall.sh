@@ -45,6 +45,14 @@ else
     echo "Log directory not found, skipping..."
 fi
 
+# Remove executable if it exists
+if [ -f /usr/bin/pysyslog ]; then
+    echo "Removing executable..."
+    rm -f /usr/bin/pysyslog
+else
+    echo "Executable not found, skipping..."
+fi
+
 # Remove system user and group if they exist
 if getent passwd pysyslog >/dev/null; then
     echo "Removing system user..."

@@ -54,7 +54,7 @@ fi
 
 # Install the package
 echo "Installing PySyslog LFC..."
-pip3 install .
+pip3 install --system .
 
 # Create necessary directories
 echo "Creating system directories..."
@@ -98,6 +98,14 @@ chmod 644 /etc/pysyslog/conf.d/*.ini
 echo "Installing systemd service..."
 cp etc/systemd/system/pysyslog.service /etc/systemd/system/
 chmod 644 /etc/systemd/system/pysyslog.service
+
+# Ensure the executable is in the system path
+echo "Setting up executable..."
+if [ -f /usr/local/bin/pysyslog ]; then
+    cp /usr/local/bin/pysyslog /usr/bin/
+    chmod 755 /usr/bin/pysyslog
+    chown root:root /usr/bin/pysyslog
+fi
 
 # Reload systemd
 echo "Reloading systemd..."
