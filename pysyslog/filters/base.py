@@ -4,102 +4,186 @@ Base filter component for PySyslog LFC
 
 import logging
 import re
-from typing import Dict, Any, Optional, Callable, TypeVar, Generic
 from abc import ABC, abstractmethod
+from typing import Dict, Any, Generic, TypeVar, Optional
 from datetime import datetime
+from enum import Enum
 
 T = TypeVar('T')
 
+class FilterStage(Enum):
+    """Filter application stage"""
+    INPUT = "input"
+    PARSER = "parser"
+    OUTPUT = "output"
+
 class FilterComponent(ABC, Generic[T]):
-    """Base class for filter components with common functionality"""
+    """Base class for filter components with common functionality.
+    
+    This class provides common functionality for all filter components:
+    - Input validation
+    - Type conversion
+    - Error handling
+    - Logging
+    - Security limits
+    
+    All filter components must inherit from this class and implement the filter() method.
+    Filters can only be used as part of a flow and must be configured with a flow name.
+    """
     
     # Security limits
     MAX_PATTERN_LENGTH = 1000
     MAX_LIST_SIZE = 1000
-    MAX_FIELD_LENGTH = 100
+    MAX_FIELD_LENGTH = 1000
     MAX_STRING_LENGTH = 10000
     
     def __init__(self, config: Dict[str, Any]):
         """Initialize filter component.
         
         Args:
-            config: Configuration dictionary containing filter parameters
-            
+            config: Configuration dictionary containing:
+                - flow_name: Name of the flow this filter belongs to (required)
+                - type: Filter type (required)
+                - field: Field to evaluate (required)
+                - op: Operation to apply (required)
+                - value: Value to compare (required)
+                - min: Lower bound for range operations (optional)
+                - max: Upper bound for range operations (optional)
+                - pattern: Regex pattern for regex operations (optional)
+                - stage: Where to apply the filter (default: parser)
+                - enabled: Whether the filter is enabled (default: True)
+                - invert: Whether to invert the match (default: False)
+                
         Raises:
             ValueError: If configuration is invalid
         """
-        self.config = config
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self._validate_config(config)
-    
-    def _validate_config(self, config: Dict[str, Any]) -> None:
-        """Validate configuration parameters.
+        self.logger = logging.getLogger(f"pysyslog.filter.{self.__class__.__name__}")
         
-        Args:
-            config: Configuration dictionary to validate
-            
+        # Get and validate flow name
+        self.flow_name = config.get("flow_name")
+        if not self.flow_name:
+            raise ValueError("flow_name parameter is required")
+        self._validate_string(self.flow_name, "flow_name")
+        
+        # Get and validate filter type
+        self.type = config.get("type")
+        if not self.type:
+            raise ValueError("type parameter is required")
+        self._validate_string(self.type, "type")
+        
+        # Get and validate field
+        self.field = config.get("field")
+        if not self.field:
+            raise ValueError("field parameter is required")
+        self._validate_string(self.field, "field")
+        
+        # Get and validate operation
+        self.op = config.get("op")
+        if not self.op:
+            raise ValueError("op parameter is required")
+        self._validate_string(self.op, "op")
+        
+        # Get and validate value
+        self.value = config.get("value")
+        if self.value is None:
+            raise ValueError("value parameter is required")
+        
+        # Get optional parameters
+        self.min_value = config.get("min")
+        self.max_value = config.get("max")
+        self.pattern = config.get("pattern")
+        self.stage = FilterStage(config.get("stage", "parser"))
+        self.enabled = bool(config.get("enabled", True))
+        self.invert = bool(config.get("invert", False))
+        
+        # Initialize filter state
+        self._initialized = False
+    
+    def initialize(self) -> None:
+        """Initialize the filter component.
+        
+        This method must be called by the flow before using the filter.
+        It ensures the filter is properly configured and ready to use.
+        
+        Raises:
+            RuntimeError: If filter is already initialized
+        """
+        if self._initialized:
+            raise RuntimeError("Filter is already initialized")
+        
+        # Validate filter-specific configuration
+        self._validate_config()
+        
+        self._initialized = True
+        self.logger.info(f"Initialized {self.type} filter for flow: {self.flow_name}")
+    
+    def is_initialized(self) -> bool:
+        """Check if filter is initialized.
+        
+        Returns:
+            bool: True if filter is initialized, False otherwise
+        """
+        return self._initialized
+    
+    def _validate_config(self) -> None:
+        """Validate filter-specific configuration.
+        
+        This method should be overridden by filter implementations to validate
+        their specific configuration parameters.
+        
         Raises:
             ValueError: If configuration is invalid
         """
-        if not isinstance(config, dict):
-            raise ValueError("Configuration must be a dictionary")
-            
-        # Validate field name
-        field = config.get("field")
-        if not field or not isinstance(field, str):
-            raise ValueError("Field name is required and must be a string")
-        if len(field) > self.MAX_FIELD_LENGTH:
-            raise ValueError(f"Field name too long (max {self.MAX_FIELD_LENGTH} chars)")
-            
-        # Validate invert parameter
-        self.invert = bool(config.get("invert", False))
+        pass
     
     def _validate_string(self, value: str, param_name: str) -> None:
         """Validate string parameter.
         
         Args:
-            value: String value to validate
-            param_name: Name of the parameter for error messages
+            value: String to validate
+            param_name: Parameter name for error messages
             
         Raises:
-            ValueError: If string is invalid
+            ValueError: If validation fails
         """
         if not isinstance(value, str):
             raise ValueError(f"{param_name} must be a string")
         if len(value) > self.MAX_STRING_LENGTH:
-            raise ValueError(f"{param_name} too long (max {self.MAX_STRING_LENGTH} chars)")
+            raise ValueError(f"{param_name} exceeds maximum length of {self.MAX_STRING_LENGTH}")
     
     def _validate_list(self, value: list, param_name: str) -> None:
         """Validate list parameter.
         
         Args:
-            value: List value to validate
-            param_name: Name of the parameter for error messages
+            value: List to validate
+            param_name: Parameter name for error messages
             
         Raises:
-            ValueError: If list is invalid
+            ValueError: If validation fails
         """
         if not isinstance(value, list):
             raise ValueError(f"{param_name} must be a list")
         if len(value) > self.MAX_LIST_SIZE:
-            raise ValueError(f"{param_name} too large (max {self.MAX_LIST_SIZE} items)")
+            raise ValueError(f"{param_name} exceeds maximum size of {self.MAX_LIST_SIZE}")
+        for item in value:
+            if isinstance(item, str) and len(item) > self.MAX_STRING_LENGTH:
+                raise ValueError(f"Item in {param_name} exceeds maximum length of {self.MAX_STRING_LENGTH}")
     
-    def _compile_pattern(self, pattern: str) -> re.Pattern:
-        """Compile regex pattern with security checks.
+    def _validate_pattern(self, pattern: str) -> None:
+        """Validate regex pattern.
         
         Args:
-            pattern: Regex pattern to compile
-            
-        Returns:
-            Compiled regex pattern
+            pattern: Pattern to validate
             
         Raises:
-            ValueError: If pattern is invalid
+            ValueError: If validation fails
         """
+        if not isinstance(pattern, str):
+            raise ValueError("Pattern must be a string")
         if len(pattern) > self.MAX_PATTERN_LENGTH:
-            raise ValueError(f"Pattern too long (max {self.MAX_PATTERN_LENGTH} chars)")
+            raise ValueError(f"Pattern exceeds maximum length of {self.MAX_PATTERN_LENGTH}")
         try:
-            return re.compile(pattern)
+            re.compile(pattern)
         except re.error as e:
             raise ValueError(f"Invalid regex pattern: {e}")
     
@@ -168,9 +252,16 @@ class FilterComponent(ABC, Generic[T]):
             
         Returns:
             bool: True if message should be kept, False if filtered out
+            
+        Raises:
+            RuntimeError: If filter is not initialized
         """
-        pass
+        if not self._initialized:
+            raise RuntimeError("Filter is not initialized")
+        if not self.enabled:
+            return True
     
     def close(self) -> None:
         """Cleanup resources."""
-        pass 
+        self._initialized = False
+        self.logger.info(f"Closed {self.type} filter for flow: {self.flow_name}") 

@@ -7,19 +7,39 @@ import threading
 from typing import Dict, Any, Optional, List
 from queue import Queue
 from dataclasses import dataclass
+from enum import Enum
 
 from .components import ComponentRegistry, InputComponent, ParserComponent, OutputComponent, FilterComponent
+
+class FilterStage(Enum):
+    """Filter application stage"""
+    INPUT = "input"
+    PARSER = "parser"
+    OUTPUT = "output"
+
+@dataclass
+class FilterConfig:
+    """Configuration for a filter"""
+    type: str
+    field: str
+    op: str
+    value: Any
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    pattern: Optional[str] = None
+    stage: FilterStage = FilterStage.PARSER
 
 @dataclass
 class FlowConfig:
     """Configuration for a flow"""
+    name: str
     input_type: str
     input_config: Dict[str, Any]
     parser_type: str
     parser_config: Dict[str, Any]
     output_type: str
     output_config: Dict[str, Any]
-    filters: List[Dict[str, Any]]
+    filter: Optional[FilterConfig] = None
 
 class Flow:
     """Represents a log processing flow"""
@@ -36,7 +56,7 @@ class Flow:
         self.input = self._create_input()
         self.parser = self._create_parser()
         self.output = self._create_output()
-        self.filters = self._create_filters()
+        self.filter = self._create_filter()
         
         # Setup queues
         self.input_queue = Queue()
@@ -51,7 +71,7 @@ class Flow:
         input_config = {}
         parser_config = {}
         output_config = {}
-        filters = []
+        filter_config = None
         
         for key, value in config.items():
             if key.startswith("input."):
@@ -62,21 +82,34 @@ class Flow:
                 output_config[key[7:]] = value
             elif key.startswith("filter."):
                 # Parse filter configuration
-                filter_parts = key[7:].split(".")
-                if len(filter_parts) == 2:
-                    filter_index = int(filter_parts[0])
-                    while len(filters) <= filter_index:
-                        filters.append({})
-                    filters[filter_index][filter_parts[1]] = value
+                filter_key = key[7:]  # Remove "filter." prefix
+                if filter_config is None:
+                    filter_config = {}
+                filter_config[filter_key] = value
+        
+        # Create filter config if present
+        filter = None
+        if filter_config:
+            filter = FilterConfig(
+                type=filter_config.get("type"),
+                field=filter_config.get("field"),
+                op=filter_config.get("op"),
+                value=filter_config.get("value"),
+                min_value=float(filter_config.get("min")) if "min" in filter_config else None,
+                max_value=float(filter_config.get("max")) if "max" in filter_config else None,
+                pattern=filter_config.get("pattern"),
+                stage=FilterStage(filter_config.get("stage", "parser"))
+            )
         
         return FlowConfig(
+            name=self.name,
             input_type=input_config.pop("type"),
             input_config=input_config,
             parser_type=parser_config.pop("type"),
             parser_config=parser_config,
             output_type=output_config.pop("type"),
             output_config=output_config,
-            filters=filters
+            filter=filter
         )
     
     def _create_input(self) -> InputComponent:
@@ -100,20 +133,28 @@ class Flow:
             self.config.output_config
         )
     
-    def _create_filters(self) -> List[FilterComponent]:
-        """Create filter components"""
-        filters = []
-        for filter_config in self.config.filters:
-            if not filter_config:
-                continue
-            filter_type = filter_config.pop("type")
-            filters.append(
-                self.registry.create_filter(
-                    filter_type,
-                    filter_config
-                )
-            )
-        return filters
+    def _create_filter(self) -> Optional[FilterComponent]:
+        """Create filter component"""
+        if not self.config.filter:
+            return None
+            
+        # Add flow name to filter config
+        filter_config = {
+            "flow_name": self.name,
+            "type": self.config.filter.type,
+            "field": self.config.filter.field,
+            "op": self.config.filter.op,
+            "value": self.config.filter.value,
+            "min": self.config.filter.min_value,
+            "max": self.config.filter.max_value,
+            "pattern": self.config.filter.pattern,
+            "stage": self.config.filter.stage.value
+        }
+        
+        return self.registry.create_filter(
+            self.config.filter.type,
+            filter_config
+        )
     
     def start(self) -> None:
         """Start the flow processing"""
@@ -122,6 +163,10 @@ class Flow:
         
         self.running = True
         self.logger.info("Starting flow")
+        
+        # Initialize filter if present
+        if self.filter:
+            self.filter.initialize()
         
         # Start input thread
         input_thread = threading.Thread(
@@ -166,8 +211,8 @@ class Flow:
         self.input.close()
         self.parser.close()
         self.output.close()
-        for filter_component in self.filters:
-            filter_component.close()
+        if self.filter:
+            self.filter.close()
     
     def _input_loop(self) -> None:
         """Input processing loop"""
@@ -175,6 +220,10 @@ class Flow:
             try:
                 data = self.input.read()
                 if data:
+                    # Apply input stage filter if present
+                    if self.filter and self.filter.stage == FilterStage.INPUT:
+                        if not self.filter.filter({"raw": data}):
+                            continue
                     self.input_queue.put(data)
             except Exception as e:
                 self.logger.error(f"Input error: {e}", exc_info=True)
@@ -186,15 +235,11 @@ class Flow:
                 data = self.input_queue.get(timeout=1)
                 parsed = self.parser.parse(data)
                 if parsed:
-                    # Apply filters
-                    should_output = True
-                    for filter_component in self.filters:
-                        if not filter_component.filter(parsed):
-                            should_output = False
-                            break
-                    
-                    if should_output:
-                        self.output_queue.put(parsed)
+                    # Apply parser stage filter if present
+                    if self.filter and self.filter.stage == FilterStage.PARSER:
+                        if not self.filter.filter(parsed):
+                            continue
+                    self.output_queue.put(parsed)
             except Queue.Empty:
                 continue
             except Exception as e:
@@ -205,6 +250,10 @@ class Flow:
         while self.running:
             try:
                 data = self.output_queue.get(timeout=1)
+                # Apply output stage filter if present
+                if self.filter and self.filter.stage == FilterStage.OUTPUT:
+                    if not self.filter.filter(data):
+                        continue
                 self.output.write(data)
             except Queue.Empty:
                 continue

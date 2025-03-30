@@ -1,215 +1,179 @@
 # Filter Components
 
-Filter components are used to filter log messages based on various conditions. PySyslog supports three types of filter components:
+Filter components are used to filter log messages based on various conditions. Filters must be used as part of a flow and cannot exist independently.
 
-## Regex Filter
+## Basic Usage
 
-Filters messages using regular expressions.
+Filters are configured within a flow's configuration:
 
 ```ini
-[flow.regex_filter]
-filter.type = regex
-filter.pattern = ERROR|WARNING
+[flow.filtered]
+name.type = flow
+name.description = "Filtered Logs"
+input.type = file
+input.path = /var/log/application.log
+parser.type = rfc3164
+
+# Filter configuration
+filter.type = numeric
+filter.field = severity
+filter.op = between
+filter.min = 3
+filter.max = 5
+filter.stage = parser
+
+output.type = file
+output.path = /var/log/errors.log
+```
+
+### Filter Configuration
+
+Each filter in a flow must have:
+- `filter.type`: Filter type (required)
+- `filter.field`: Field to evaluate (required)
+- `filter.op`: Operation to apply (required)
+- `filter.value`: Value to compare (required)
+- `filter.stage`: Where to apply the filter (optional, default: parser)
+
+Additional parameters depend on the filter type:
+- `filter.min`: Lower bound for range operations
+- `filter.max`: Upper bound for range operations
+- `filter.pattern`: Regex pattern for regex operations
+
+The flow name is automatically added to the filter configuration.
+
+## Filter Types
+
+### Numeric Filter
+```ini
+filter.type = numeric
+filter.field = severity
+filter.op = between
+filter.min = 3
+filter.max = 5
+```
+
+### Text Filter
+```ini
+filter.type = text
 filter.field = message
-filter.invert = false
-filter.case_sensitive = true
+filter.op = contains
+filter.value = error
 ```
 
-### Configuration Options
-
-- `filter.type`: Must be `regex`
-- `filter.pattern`: Regular expression
-  - Required
-  - Supports capture groups
-- `filter.field`: Field to match
-  - Default: `message`
-  - Options: Any parsed field
-- `filter.invert`: Invert match
-  - Default: `false`
-  - Options: `true`, `false`
-- `filter.case_sensitive`: Case sensitivity
-  - Default: `true`
-  - Options: `true`, `false`
-
-### Pattern Examples
-
-1. Error Messages:
+### Regex Filter
 ```ini
-filter.pattern = (ERROR|WARNING|CRITICAL)
+filter.type = regex
+filter.field = message
+filter.op = match
+filter.pattern = ^ERROR.*
 ```
 
-2. IP Addresses:
+### Field Existence Filter
 ```ini
-filter.pattern = \b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b
+filter.type = exists
+filter.field = status_code
+filter.op = required
 ```
 
-3. Email Addresses:
-```ini
-filter.pattern = [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
-```
+## Filter Stages
 
-## Level Filter
+Filters can be applied at different stages of the flow:
 
-Filters messages based on log levels.
+1. Input Stage:
+   ```ini
+   filter.stage = input
+   ```
+   - Applied to raw input data
+   - Field is always "raw"
+   - Useful for pre-parsing filtering
 
-```ini
-[flow.level_filter]
-filter.type = level
-filter.levels = ERROR,WARNING
-filter.invert = false
-filter.field = level
-```
+2. Parser Stage (default):
+   ```ini
+   filter.stage = parser
+   ```
+   - Applied to parsed message data
+   - Can access any parsed field
+   - Most common stage
 
-### Configuration Options
+3. Output Stage:
+   ```ini
+   filter.stage = output
+   ```
+   - Applied to final message data
+   - Can access all fields
+   - Useful for final filtering
 
-- `filter.type`: Must be `level`
-- `filter.levels`: Log levels
-  - Required
-  - Comma-separated list
-- `filter.invert`: Invert match
-  - Default: `false`
-  - Options: `true`, `false`
-- `filter.field`: Field to match
-  - Default: `level`
-  - Options: Any parsed field
+## Filter Operations
 
-### Supported Levels
+### Numeric Operations
+- `eq`: Equal to
+- `ne`: Not equal to
+- `gt`: Greater than
+- `ge`: Greater than or equal
+- `lt`: Less than
+- `le`: Less than or equal
+- `between`: Between min and max
 
-1. Standard Levels:
-   - `DEBUG`
-   - `INFO`
-   - `WARNING`
-   - `ERROR`
-   - `CRITICAL`
+### Text Operations
+- `eq`: Equal to
+- `ne`: Not equal to
+- `contains`: Contains substring
+- `startswith`: Starts with
+- `endswith`: Ends with
+- `matches`: Matches regex
 
-2. Syslog Levels:
-   - `EMERG`
-   - `ALERT`
-   - `CRIT`
-   - `ERR`
-   - `WARNING`
-   - `NOTICE`
-   - `INFO`
-   - `DEBUG`
+### Field Operations
+- `exists`: Field exists
+- `not_exists`: Field does not exist
+- `is_null`: Field is null
+- `not_null`: Field is not null
 
-## Field Filter
+## Security Limits
 
-Filters messages based on field values.
-
-```ini
-[flow.field_filter]
-filter.type = field
-filter.field = status
-filter.operator = eq
-filter.value = 404
-filter.invert = false
-```
-
-### Configuration Options
-
-- `filter.type`: Must be `field`
-- `filter.field`: Field to match
-  - Required
-  - Any parsed field
-- `filter.operator`: Comparison operator
-  - Required
-  - See operators below
-- `filter.value`: Value to match
-  - Required
-  - Type depends on field
-- `filter.invert`: Invert match
-  - Default: `false`
-  - Options: `true`, `false`
-
-### Operators
-
-1. Numeric:
-   - `eq`: Equal to
-   - `ne`: Not equal to
-   - `gt`: Greater than
-   - `ge`: Greater than or equal
-   - `lt`: Less than
-   - `le`: Less than or equal
-
-2. String:
-   - `eq`: Equal to
-   - `ne`: Not equal to
-   - `contains`: Contains substring
-   - `startswith`: Starts with
-   - `endswith`: Ends with
-   - `matches`: Matches regex
-
-3. Boolean:
-   - `eq`: Equal to
-   - `ne`: Not equal to
-
-## Common Settings
-
-All filter components support these common settings:
-
-```ini
-[flow.common]
-filter.enabled = true
-filter.batch_size = 100
-filter.max_matches = 1000
-filter.timeout = 5s
-```
-
-### Common Options
-
-- `filter.enabled`: Enable/disable filter
-  - Default: `true`
-  - Options: `true`, `false`
-- `filter.batch_size`: Messages per batch
-  - Default: `100`
-  - Range: `1` to `1000`
-- `filter.max_matches`: Maximum matches
-  - Default: `1000`
-  - Range: `100` to `10000`
-- `filter.timeout`: Filter timeout
-  - Default: `5s`
-  - Format: `<number><unit>` (e.g., `5s`, `1m`)
+Filters enforce security limits:
+- Maximum pattern length: 1000 characters
+- Maximum list size: 1000 items
+- Maximum field length: 1000 characters
+- Maximum string length: 10000 characters
 
 ## Error Handling
 
-Filter components handle errors gracefully:
+1. Configuration Errors:
+   - Invalid filter type
+   - Missing required parameters
+   - Invalid parameter values
 
-1. Pattern errors:
-   - Invalid regex
+2. Runtime Errors:
+   - Invalid message format
    - Missing fields
-   - Type mismatches
+   - Type conversion errors
 
-2. Field errors:
-   - Missing fields
-   - Invalid operators
-   - Value conversion
-
-3. Performance errors:
-   - Timeout handling
-   - Resource limits
-   - Memory protection
+3. Resource Errors:
+   - Memory limits
+   - CPU limits
+   - I/O limits
 
 ## Performance Considerations
 
-1. Pattern optimization:
-   - Compiled regex
-   - Efficient matching
-   - Memory usage
+1. Filter Stage:
+   - Input stage: Pre-parsing filtering
+   - Parser stage: Post-parsing filtering
+   - Output stage: Final filtering
 
-2. Field access:
-   - Field caching
-   - Type conversion
-   - Value comparison
+2. Operation Cost:
+   - Simple operations (eq, ne)
+   - String operations (contains, matches)
+   - Range operations (between)
 
-3. Batch processing:
-   - Larger batches for throughput
-   - Smaller batches for latency
-   - Configure based on needs
+3. Resource Usage:
+   - Memory per filter
+   - CPU per filter
+   - I/O operations
 
 ## Example Configurations
 
 ### Error Logging
-
 ```ini
 [flow.errors]
 name.type = flow
@@ -217,14 +181,18 @@ name.description = "Error Logs"
 input.type = file
 input.path = /var/log/application.log
 parser.type = rfc3164
-filter.type = regex
-filter.pattern = (ERROR|WARNING|CRITICAL)
+
+# Level filter
+filter.type = numeric
+filter.field = severity
+filter.op = ge
+filter.value = 3
+
 output.type = file
 output.path = /var/log/errors.log
 ```
 
 ### Status Code Filtering
-
 ```ini
 [flow.status]
 name.type = flow
@@ -233,25 +201,34 @@ input.type = file
 input.path = /var/log/access.log
 parser.type = regex
 parser.pattern = (?P<status>\d{3})
-filter.type = field
+
+# Status code filter
+filter.type = numeric
 filter.field = status
-filter.operator = ge
-filter.value = 400
+filter.op = between
+filter.min = 400
+filter.max = 599
+
 output.type = file
 output.path = /var/log/errors.log
 ```
 
-### Level-Based Filtering
-
+### Complex Filtering
 ```ini
-[flow.levels]
+[flow.complex]
 name.type = flow
-name.description = "Log Levels"
+name.description = "Complex Filtering"
 input.type = file
 input.path = /var/log/application.log
 parser.type = rfc3164
-filter.type = level
-filter.levels = ERROR,CRITICAL
+
+# Message filter
+filter.type = regex
+filter.field = message
+filter.op = match
+filter.pattern = ^ERROR.*
+filter.stage = parser
+
 output.type = tcp
 output.host = logserver.example.com
 output.port = 514
