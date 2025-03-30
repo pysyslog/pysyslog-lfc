@@ -5,7 +5,7 @@ IP address filter component for PySyslog LFC
 import logging
 import ipaddress
 from typing import Dict, Any, Callable, Union, List
-from .base import FilterComponent
+from .base import FilterComponent, FilterStage
 
 class Filter(FilterComponent):
     """Filter messages based on IP address comparisons.
@@ -16,17 +16,23 @@ class Filter(FilterComponent):
     
     Configuration:
         - field: Field to compare (required)
-        - operator: IP address operator (required)
+        - op: IP address operator (required)
         - value: IP address or CIDR range to compare against (required)
-        - invert: Whether to invert the match (default: False)
+        - stage: Where to apply the filter (default: parser)
+        - invert: Whether to invert the match (default: false)
     """
     
     # Valid operators and their functions
     OPERATORS = {
-        "equals": lambda x, y: x == y,
-        "not_equals": lambda x, y: x != y,
+        # Basic operations
+        "eq": lambda x, y: x == y,
+        "ne": lambda x, y: x != y,
+        
+        # Network operations
         "in_network": lambda x, y: x in y,
         "not_in_network": lambda x, y: x not in y,
+        
+        # IP type operations
         "is_private": lambda x, y: x.is_private,
         "is_global": lambda x, y: x.is_global,
         "is_multicast": lambda x, y: x.is_multicast,
@@ -34,33 +40,35 @@ class Filter(FilterComponent):
         "is_link_local": lambda x, y: x.is_link_local
     }
     
+    # Security limits
+    MAX_CIDR_PREFIX = 32  # Maximum CIDR prefix for IPv4
+    MAX_CIDR_PREFIX_V6 = 128  # Maximum CIDR prefix for IPv6
+    MAX_NETWORKS = 100  # Maximum number of networks in a list
+    
     def __init__(self, config: Dict[str, Any]):
         """Initialize IP address filter.
         
         Args:
             config: Configuration dictionary containing:
-                - field: Field to compare
-                - operator: IP address operator
-                - value: IP address or CIDR range to compare against
-                - invert: Whether to invert the match (default: False)
+                - flow_name: Name of the flow this filter belongs to (required)
+                - type: Filter type (required)
+                - field: Field to compare (required)
+                - op: IP address operator (required)
+                - value: IP address or CIDR range to compare against (required)
+                - stage: Where to apply the filter (default: parser)
+                - invert: Whether to invert the match (default: false)
                 
         Raises:
             ValueError: If configuration is invalid
         """
         super().__init__(config)
         
-        # Get and validate field
-        self.field = config.get("field")
-        if not self.field:
-            raise ValueError("field parameter is required")
-        self._validate_string(self.field, "field")
-        
         # Get and validate operator
-        self.operator = config.get("operator")
-        if not self.operator:
-            raise ValueError("operator parameter is required")
-        if self.operator not in self.OPERATORS:
-            raise ValueError(f"Invalid operator: {self.operator}. Must be one of: {', '.join(self.OPERATORS.keys())}")
+        self.op = config.get("op")
+        if not self.op:
+            raise ValueError("op parameter is required")
+        if self.op not in self.OPERATORS:
+            raise ValueError(f"Invalid operator: {self.op}. Must be one of: {', '.join(self.OPERATORS.keys())}")
         
         # Get and validate value
         self.value = config.get("value")
@@ -68,9 +76,12 @@ class Filter(FilterComponent):
             raise ValueError("value parameter is required")
             
         # Parse value based on operator
-        if self.operator in ["in_network", "not_in_network"]:
+        if self.op in ["in_network", "not_in_network"]:
             try:
                 self.value = ipaddress.ip_network(self.value)
+                # Validate CIDR prefix
+                if self.value.prefixlen > (self.MAX_CIDR_PREFIX_V6 if self.value.version == 6 else self.MAX_CIDR_PREFIX):
+                    raise ValueError(f"CIDR prefix too large: {self.value.prefixlen}")
             except ValueError as e:
                 raise ValueError(f"Invalid CIDR range: {e}")
         else:
@@ -80,7 +91,23 @@ class Filter(FilterComponent):
                 raise ValueError(f"Invalid IP address: {e}")
         
         # Get operator function
-        self._operator_func = self.OPERATORS[self.operator]
+        self._operator_func = self.OPERATORS[self.op]
+    
+    def _validate_config(self) -> None:
+        """Validate filter-specific configuration.
+        
+        Raises:
+            ValueError: If configuration is invalid
+        """
+        # Validate field exists in data
+        if self.field not in self._test_data:
+            raise ValueError(f"Field '{self.field}' not found in test data")
+        
+        # Validate field value can be converted to IP address
+        try:
+            ipaddress.ip_address(self._test_data[self.field])
+        except ValueError:
+            raise ValueError(f"Field '{self.field}' must contain valid IP addresses")
     
     def filter(self, data: Dict[str, Any]) -> bool:
         """Filter messages based on IP address comparison.

@@ -2,6 +2,14 @@
 
 Filter components are used to filter log messages based on various conditions. Filters must be used as part of a flow and cannot exist independently.
 
+## Overview
+
+Filters in PySyslog LFC are designed to be:
+1. Part of a flow - filters cannot exist independently
+2. Stage-specific - can be applied at input, parser, or output stages
+3. Type-safe - with proper validation and error handling
+4. Resource-efficient - with security limits and performance considerations
+
 ## Basic Usage
 
 Filters are configured within a flow's configuration:
@@ -44,37 +52,35 @@ The flow name is automatically added to the filter configuration.
 
 ## Filter Types
 
-### Numeric Filter
-```ini
-filter.type = numeric
-filter.field = severity
-filter.op = between
-filter.min = 3
-filter.max = 5
-```
+### Basic Filters
+- [Numeric Filter](filters/numeric.md) - Compare numeric values
+- [Text Filter](filters/text.md) - Compare text values
+- [Regex Filter](filters/regex.md) - Match against regex patterns
+- [Field Filter](filters/field.md) - Check field existence and values
 
-### Text Filter
-```ini
-filter.type = text
-filter.field = message
-filter.op = contains
-filter.value = error
-```
+### Data Type Filters
+- [Boolean Filter](filters/boolean.md) - Boolean operations
+- [List Filter](filters/list.md) - List operations
+- [Timestamp Filter](filters/timestamp.md) - Date/time operations
+- [Level Filter](filters/level.md) - Log level operations
 
-### Regex Filter
-```ini
-filter.type = regex
-filter.field = message
-filter.op = match
-filter.pattern = ^ERROR.*
-```
+### Network Filters
+- [IP Filter](filters/ip.md) - IP address operations
+- [Port Filter](filters/port.md) - Port number operations
+- [Protocol Filter](filters/protocol.md) - Protocol operations
+- [Hostname Filter](filters/hostname.md) - Hostname operations
 
-### Field Existence Filter
-```ini
-filter.type = exists
-filter.field = status_code
-filter.op = required
-```
+### Format Filters
+- [URL Filter](filters/url.md) - URL operations
+- [Email Filter](filters/email.md) - Email operations
+- [JSON Filter](filters/json.md) - JSON operations
+- [MIME Filter](filters/mime.md) - MIME type operations
+
+### Special Filters
+- [Hash Filter](filters/hash.md) - Hash operations
+- [UUID Filter](filters/uuid.md) - UUID operations
+- [Version Filter](filters/version.md) - Version number operations
+- [Path Filter](filters/path.md) - File path operations
 
 ## Filter Stages
 
@@ -103,31 +109,6 @@ Filters can be applied at different stages of the flow:
    - Applied to final message data
    - Can access all fields
    - Useful for final filtering
-
-## Filter Operations
-
-### Numeric Operations
-- `eq`: Equal to
-- `ne`: Not equal to
-- `gt`: Greater than
-- `ge`: Greater than or equal
-- `lt`: Less than
-- `le`: Less than or equal
-- `between`: Between min and max
-
-### Text Operations
-- `eq`: Equal to
-- `ne`: Not equal to
-- `contains`: Contains substring
-- `startswith`: Starts with
-- `endswith`: Ends with
-- `matches`: Matches regex
-
-### Field Operations
-- `exists`: Field exists
-- `not_exists`: Field does not exist
-- `is_null`: Field is null
-- `not_null`: Field is not null
 
 ## Security Limits
 
