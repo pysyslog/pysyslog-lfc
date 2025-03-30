@@ -158,6 +158,7 @@ pysyslog-lfc/
 │       ├── flow.py
 │       ├── components.py
 │       ├── inputs/         # Input components
+|       ├── filters/        # Filter components
 │       ├── parsers/        # Parser components
 │       └── outputs/        # Output components
 ├── install.sh             # Linux/macOS installation script
