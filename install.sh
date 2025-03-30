@@ -9,19 +9,39 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Install required packages
+# Detect distribution
+detect_distribution() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "$ID"
+    else
+        echo "unknown"
+    fi
+}
+
+DISTRO=$(detect_distribution)
+
+# Install required packages based on distribution
 echo "Installing required packages..."
-if [ -f /etc/redhat-release ]; then
-    # RHEL/CentOS
-    dnf install -y python3 python3-pip python3-devel systemd-devel python3-systemd gcc gcc-c++ make
-elif [ -f /etc/debian_version ]; then
-    # Debian/Ubuntu
-    apt-get update
-    apt-get install -y python3 python3-pip python3-dev libsystemd-dev python3-systemd gcc g++ make
-else
-    echo "Unsupported operating system"
-    exit 1
-fi
+case $DISTRO in
+    "rhel"|"centos"|"rocky")
+        dnf install -y python3 python3-pip python3-devel systemd-devel python3-systemd gcc gcc-c++ make
+        ;;
+    "ubuntu"|"debian")
+        apt-get update
+        apt-get install -y python3 python3-pip python3-dev libsystemd-dev python3-systemd gcc g++ make
+        ;;
+    "suse"|"opensuse")
+        zypper install -y python3 python3-pip python3-devel systemd-devel python3-systemd gcc gcc-c++ make
+        ;;
+    "alpine")
+        apk add --no-cache python3 py3-pip python3-dev systemd-dev py3-systemd gcc g++ make
+        ;;
+    *)
+        echo "Unsupported operating system: $DISTRO"
+        exit 1
+        ;;
+esac
 
 # Create system user and group if they don't exist
 echo "Creating system user and group..."
@@ -49,9 +69,22 @@ chown -R pysyslog:pysyslog /var/lib/pysyslog
 chmod 755 /var/log/pysyslog
 chmod 755 /var/lib/pysyslog
 
-# Add pysyslog user to systemd-journal group for log access
-echo "Adding pysyslog user to systemd-journal group..."
-usermod -a -G systemd-journal pysyslog
+# Add pysyslog user to appropriate groups based on distribution
+echo "Setting up user permissions..."
+case $DISTRO in
+    "ubuntu"|"debian")
+        # Debian/Ubuntu use systemd-journal group
+        usermod -a -G systemd-journal pysyslog
+        ;;
+    "rhel"|"centos"|"rocky"|"suse"|"opensuse")
+        # RHEL/CentOS/SUSE use adm group
+        usermod -a -G adm pysyslog
+        ;;
+    "alpine")
+        # Alpine uses root group for log access
+        usermod -a -G root pysyslog
+        ;;
+esac
 
 # Copy configuration files
 echo "Installing configuration..."
