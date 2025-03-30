@@ -1,4 +1,8 @@
 ![Pylint](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml/badge.svg)
+![Python Versions](https://img.shields.io/badge/python-3.8%20|%203.9%20|%203.10-blue)
+[![License](https://img.shields.io/github/license/pysyslog/pysyslog-lfc.svg)](LICENSE)
+![Last Commit](https://img.shields.io/github/last-commit/pysyslog/pysyslog-lfc)
+
 
 # PySyslog LFC
 
