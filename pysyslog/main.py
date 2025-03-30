@@ -7,25 +7,43 @@ Main entry point
 import os
 import sys
 import logging
+import json
 import configparser
 from pathlib import Path
 from typing import Dict, List, Optional
+from datetime import datetime
 
 from .config import Config
 from .flow import Flow
 from .components import ComponentRegistry
 
+class JsonFormatter(logging.Formatter):
+    """JSON formatter for logging"""
+    
+    def format(self, record):
+        """Format the log record as JSON"""
+        log_obj = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+        }
+        
+        if hasattr(record, "extra"):
+            log_obj.update(record.extra)
+        
+        if record.exc_info:
+            log_obj["exception"] = self.formatException(record.exc_info)
+        
+        return json.dumps(log_obj)
+
 def setup_logging(level: str = "INFO") -> None:
     """Configure logging with JSON format"""
-    import pythonjsonlogger.jsonlogger
-    
     logger = logging.getLogger()
     logger.setLevel(getattr(logging, level.upper()))
     
     handler = logging.StreamHandler()
-    formatter = pythonjsonlogger.jsonlogger.JsonFormatter(
-        fmt="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
+    formatter = JsonFormatter()
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
