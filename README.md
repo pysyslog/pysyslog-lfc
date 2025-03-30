@@ -58,6 +58,7 @@ git clone https://github.com/pysyslog/pysyslog-lfc.git
 
 cd pysyslog-lfc
 ```
+
 2. Run the installation script as administrator:
 ```cmd
 install.bat
