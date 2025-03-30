@@ -6,8 +6,8 @@ After=network.target
 Type=simple
 User=pysyslog
 Group=pysyslog
-Environment=HOME=/home/pysyslog
-ExecStart=/home/pysyslog/.local/bin/pysyslog
+Environment=HOME=/var/lib/pysyslog
+ExecStart=/usr/bin/pysyslog
 Restart=always
 RestartSec=10
 Environment=PYSYSLOG_CONFIG=/etc/pysyslog/main.ini
