@@ -1,7 +1,9 @@
 
 [![Pylint](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml/badge.svg)](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml)
 ![Python Versions](https://img.shields.io/badge/python-3.8%20|%203.9%20|%203.10-blue)
-[![License](https://img.shields.io/github/license/pysyslog/pysyslog-lfc.svg)](https://github.com/pysyslog/pysyslog-lfc/blob/main/LICENSE.md)
+
+[![License](https://img.shields.io/github/license/pysyslog/pysyslog-lfc)](https://github.com/pysyslog/pysyslog-lfc/blob/main/LICENSE)
+
 [![Last Commit](https://img.shields.io/github/last-commit/pysyslog/pysyslog-lfc.svg)](https://github.com/pysyslog/pysyslog-lfc/commits/main)
 
 
