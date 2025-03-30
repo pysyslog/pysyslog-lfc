@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from typing import Dict, Any, Callable, Union, List
-from .base import FilterComponent
+from .base import FilterComponent, FilterStage
 
 class Filter(FilterComponent):
     """Filter messages based on file path comparisons.
@@ -17,10 +17,11 @@ class Filter(FilterComponent):
     
     Configuration:
         - field: Field to compare (required)
-        - operator: Path operator (required)
+        - op: Path operator (required)
         - value: Path or path component to compare against (required)
         - component: Path component to compare (optional)
-        - invert: Whether to invert the match (default: False)
+        - stage: Where to apply the filter (default: parser)
+        - invert: Whether to invert the match (default: false)
     """
     
     # Path regex pattern
@@ -29,17 +30,17 @@ class Filter(FilterComponent):
     # Valid operators and their functions
     OPERATORS = {
         # Path operators
-        "equals": lambda x, y: x == y,
-        "not_equals": lambda x, y: x != y,
+        "eq": lambda x, y: x == y,
+        "ne": lambda x, y: x != y,
         "contains": lambda x, y: y in x,
         "not_contains": lambda x, y: y not in x,
-        "startswith": lambda x, y: x.startswith(y),
-        "endswith": lambda x, y: x.endswith(y),
+        "starts_with": lambda x, y: x.startswith(y),
+        "ends_with": lambda x, y: x.endswith(y),
         
         # Component operators
-        "dirname_equals": lambda x, y: os.path.dirname(x) == y,
-        "basename_equals": lambda x, y: os.path.basename(x) == y,
-        "extension_equals": lambda x, y: os.path.splitext(x)[1] == y,
+        "dirname_eq": lambda x, y: os.path.dirname(x) == y,
+        "basename_eq": lambda x, y: os.path.basename(x) == y,
+        "extension_eq": lambda x, y: os.path.splitext(x)[1] == y,
         
         # Validation operators
         "is_valid": lambda x, y: bool(Filter.PATH_PATTERN.match(x)),
@@ -52,34 +53,36 @@ class Filter(FilterComponent):
         "no_extension": lambda x, y: not bool(os.path.splitext(x)[1])
     }
     
+    # Security limits
+    MAX_PATH_LENGTH = 4096  # Maximum path length (common OS limit)
+    MAX_COMPONENT_LENGTH = 255  # Maximum component length (common OS limit)
+    MAX_DEPTH = 100  # Maximum path depth
+    
     def __init__(self, config: Dict[str, Any]):
         """Initialize path filter.
         
         Args:
             config: Configuration dictionary containing:
-                - field: Field to compare
-                - operator: Path operator
-                - value: Path or path component to compare against
+                - flow_name: Name of the flow this filter belongs to (required)
+                - type: Filter type (required)
+                - field: Field to compare (required)
+                - op: Path operator (required)
+                - value: Path or path component to compare against (required)
                 - component: Path component to compare (optional)
-                - invert: Whether to invert the match (default: False)
+                - stage: Where to apply the filter (default: parser)
+                - invert: Whether to invert the match (default: false)
                 
         Raises:
             ValueError: If configuration is invalid
         """
         super().__init__(config)
         
-        # Get and validate field
-        self.field = config.get("field")
-        if not self.field:
-            raise ValueError("field parameter is required")
-        self._validate_string(self.field, "field")
-        
         # Get and validate operator
-        self.operator = config.get("operator")
-        if not self.operator:
-            raise ValueError("operator parameter is required")
-        if self.operator not in self.OPERATORS:
-            raise ValueError(f"Invalid operator: {self.operator}. Must be one of: {', '.join(self.OPERATORS.keys())}")
+        self.op = config.get("op")
+        if not self.op:
+            raise ValueError("op parameter is required")
+        if self.op not in self.OPERATORS:
+            raise ValueError(f"Invalid operator: {self.op}. Must be one of: {', '.join(self.OPERATORS.keys())}")
         
         # Get and validate value
         self.value = config.get("value")
@@ -87,13 +90,49 @@ class Filter(FilterComponent):
             raise ValueError("value parameter is required")
         self._validate_string(self.value, "value")
         
+        # Validate value length
+        if len(self.value) > self.MAX_PATH_LENGTH:
+            raise ValueError(f"Path too long: {len(self.value)}")
+        
         # Validate path if needed
-        if self.operator in ["dirname_equals", "basename_equals", "extension_equals"]:
+        if self.op in ["dirname_eq", "basename_eq", "extension_eq"]:
             if not self.PATH_PATTERN.match(self.value):
                 raise ValueError(f"Invalid path: {self.value}")
+            # Validate component lengths
+            components = self.value.split(os.sep)
+            if len(components) > self.MAX_DEPTH:
+                raise ValueError("Path too deep")
+            for component in components:
+                if len(component) > self.MAX_COMPONENT_LENGTH:
+                    raise ValueError(f"Component too long: {len(component)}")
         
         # Get operator function
-        self._operator_func = self.OPERATORS[self.operator]
+        self._operator_func = self.OPERATORS[self.op]
+    
+    def _validate_config(self) -> None:
+        """Validate filter-specific configuration.
+        
+        Raises:
+            ValueError: If configuration is invalid
+        """
+        # Validate field exists in data
+        if self.field not in self._test_data:
+            raise ValueError(f"Field '{self.field}' not found in test data")
+        
+        # Validate field value can be parsed as path
+        field_value = self._test_data[self.field]
+        if isinstance(field_value, str):
+            if len(field_value) > self.MAX_PATH_LENGTH:
+                raise ValueError(f"Path too long: {len(field_value)}")
+            if not self.PATH_PATTERN.match(field_value):
+                raise ValueError(f"Field '{self.field}' must contain valid paths")
+            # Validate component lengths
+            components = field_value.split(os.sep)
+            if len(components) > self.MAX_DEPTH:
+                raise ValueError("Path too deep")
+            for component in components:
+                if len(component) > self.MAX_COMPONENT_LENGTH:
+                    raise ValueError(f"Component too long: {len(component)}")
     
     def filter(self, data: Dict[str, Any]) -> bool:
         """Filter messages based on path comparison.
@@ -113,6 +152,22 @@ class Filter(FilterComponent):
             # Convert to string if needed
             if not isinstance(field_value, str):
                 field_value = str(field_value)
+            
+            # Validate length
+            if len(field_value) > self.MAX_PATH_LENGTH:
+                return False
+            
+            # Validate path format
+            if not self.PATH_PATTERN.match(field_value):
+                return False
+            
+            # Validate component lengths
+            components = field_value.split(os.sep)
+            if len(components) > self.MAX_DEPTH:
+                return False
+            for component in components:
+                if len(component) > self.MAX_COMPONENT_LENGTH:
+                    return False
             
             # Apply operator
             result = self._operator_func(field_value, self.value)

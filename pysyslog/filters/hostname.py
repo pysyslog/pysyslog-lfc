@@ -5,7 +5,7 @@ Hostname filter component for PySyslog LFC
 import logging
 import re
 from typing import Dict, Any, Callable, Union, List
-from .base import FilterComponent
+from .base import FilterComponent, FilterStage
 
 class Filter(FilterComponent):
     """Filter messages based on hostname comparisons.
@@ -16,10 +16,11 @@ class Filter(FilterComponent):
     
     Configuration:
         - field: Field to compare (required)
-        - operator: Hostname operator (required)
+        - op: Hostname operator (required)
         - value: Hostname or hostname component to compare against (required)
         - component: Hostname component to compare (optional)
-        - invert: Whether to invert the match (default: False)
+        - stage: Where to apply the filter (default: parser)
+        - invert: Whether to invert the match (default: false)
     """
     
     # Hostname regex pattern
@@ -28,17 +29,17 @@ class Filter(FilterComponent):
     # Valid operators and their functions
     OPERATORS = {
         # Hostname operators
-        "equals": lambda x, y: x == y,
-        "not_equals": lambda x, y: x != y,
+        "eq": lambda x, y: x == y,
+        "ne": lambda x, y: x != y,
         "contains": lambda x, y: y in x,
         "not_contains": lambda x, y: y not in x,
-        "startswith": lambda x, y: x.startswith(y),
-        "endswith": lambda x, y: x.endswith(y),
+        "starts_with": lambda x, y: x.startswith(y),
+        "ends_with": lambda x, y: x.endswith(y),
         
         # Component operators
-        "domain_equals": lambda x, y: x.split(".")[-2:] == y.split("."),
+        "domain_eq": lambda x, y: x.split(".")[-2:] == y.split("."),
         "domain_ends_with": lambda x, y: x.endswith(y),
-        "subdomain_equals": lambda x, y: x.split(".")[0] == y,
+        "subdomain_eq": lambda x, y: x.split(".")[0] == y,
         
         # Validation operators
         "is_valid": lambda x, y: bool(Filter.HOSTNAME_PATTERN.match(x)),
@@ -50,34 +51,36 @@ class Filter(FilterComponent):
         "is_localhost": lambda x, y: x.lower() in ["localhost", "127.0.0.1", "::1"]
     }
     
+    # Security limits
+    MAX_HOSTNAME_LENGTH = 253  # Maximum hostname length (RFC 1035)
+    MAX_LABEL_LENGTH = 63  # Maximum label length (RFC 1035)
+    MAX_LABELS = 127  # Maximum number of labels (RFC 1035)
+    
     def __init__(self, config: Dict[str, Any]):
         """Initialize hostname filter.
         
         Args:
             config: Configuration dictionary containing:
-                - field: Field to compare
-                - operator: Hostname operator
-                - value: Hostname or hostname component to compare against
+                - flow_name: Name of the flow this filter belongs to (required)
+                - type: Filter type (required)
+                - field: Field to compare (required)
+                - op: Hostname operator (required)
+                - value: Hostname or hostname component to compare against (required)
                 - component: Hostname component to compare (optional)
-                - invert: Whether to invert the match (default: False)
+                - stage: Where to apply the filter (default: parser)
+                - invert: Whether to invert the match (default: false)
                 
         Raises:
             ValueError: If configuration is invalid
         """
         super().__init__(config)
         
-        # Get and validate field
-        self.field = config.get("field")
-        if not self.field:
-            raise ValueError("field parameter is required")
-        self._validate_string(self.field, "field")
-        
         # Get and validate operator
-        self.operator = config.get("operator")
-        if not self.operator:
-            raise ValueError("operator parameter is required")
-        if self.operator not in self.OPERATORS:
-            raise ValueError(f"Invalid operator: {self.operator}. Must be one of: {', '.join(self.OPERATORS.keys())}")
+        self.op = config.get("op")
+        if not self.op:
+            raise ValueError("op parameter is required")
+        if self.op not in self.OPERATORS:
+            raise ValueError(f"Invalid operator: {self.op}. Must be one of: {', '.join(self.OPERATORS.keys())}")
         
         # Get and validate value
         self.value = config.get("value")
@@ -85,13 +88,49 @@ class Filter(FilterComponent):
             raise ValueError("value parameter is required")
         self._validate_string(self.value, "value")
         
+        # Validate value length
+        if len(self.value) > self.MAX_HOSTNAME_LENGTH:
+            raise ValueError(f"Hostname too long: {len(self.value)}")
+        
         # Validate hostname if needed
-        if self.operator in ["domain_equals", "domain_ends_with", "subdomain_equals"]:
+        if self.op in ["domain_eq", "domain_ends_with", "subdomain_eq"]:
             if not self.HOSTNAME_PATTERN.match(self.value):
                 raise ValueError(f"Invalid hostname: {self.value}")
+            # Validate component lengths
+            labels = self.value.split(".")
+            if len(labels) > self.MAX_LABELS:
+                raise ValueError("Too many labels")
+            for label in labels:
+                if len(label) > self.MAX_LABEL_LENGTH:
+                    raise ValueError(f"Label too long: {len(label)}")
         
         # Get operator function
-        self._operator_func = self.OPERATORS[self.operator]
+        self._operator_func = self.OPERATORS[self.op]
+    
+    def _validate_config(self) -> None:
+        """Validate filter-specific configuration.
+        
+        Raises:
+            ValueError: If configuration is invalid
+        """
+        # Validate field exists in data
+        if self.field not in self._test_data:
+            raise ValueError(f"Field '{self.field}' not found in test data")
+        
+        # Validate field value can be parsed as hostname
+        field_value = self._test_data[self.field]
+        if isinstance(field_value, str):
+            if len(field_value) > self.MAX_HOSTNAME_LENGTH:
+                raise ValueError(f"Hostname too long: {len(field_value)}")
+            if not self.HOSTNAME_PATTERN.match(field_value):
+                raise ValueError(f"Field '{self.field}' must contain valid hostnames")
+            # Validate component lengths
+            labels = field_value.split(".")
+            if len(labels) > self.MAX_LABELS:
+                raise ValueError("Too many labels")
+            for label in labels:
+                if len(label) > self.MAX_LABEL_LENGTH:
+                    raise ValueError(f"Label too long: {len(label)}")
     
     def filter(self, data: Dict[str, Any]) -> bool:
         """Filter messages based on hostname comparison.
@@ -111,6 +150,22 @@ class Filter(FilterComponent):
             # Convert to string if needed
             if not isinstance(field_value, str):
                 field_value = str(field_value)
+            
+            # Validate length
+            if len(field_value) > self.MAX_HOSTNAME_LENGTH:
+                return False
+            
+            # Validate hostname format
+            if not self.HOSTNAME_PATTERN.match(field_value):
+                return False
+            
+            # Validate component lengths
+            labels = field_value.split(".")
+            if len(labels) > self.MAX_LABELS:
+                return False
+            for label in labels:
+                if len(label) > self.MAX_LABEL_LENGTH:
+                    return False
             
             # Apply operator
             result = self._operator_func(field_value, self.value)
