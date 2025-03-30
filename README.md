@@ -33,7 +33,7 @@ A lightweight, modular log processor with flow-based configuration.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/rsyslog/pysyslog-lfc.git
+git clone https://github.com/pysyslog/pysyslog-lfc.git
 
 ```
 
@@ -72,7 +72,7 @@ install.bat
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/rsyslog/pysyslog-lfc.git
+git clone https://github.com/pyyslog/pysyslog-lfc.git
 cd pysyslog-lfc
 ```
 
