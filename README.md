@@ -46,7 +46,9 @@ sudo ./install.sh
 
 1. Clone the repository:
 ```cmd
-git clone https://github.com/rsyslog/pysyslog-lfc.git
+
+git clone https://github.com/pysyslog/pysyslog-lfc.git
+
 cd pysyslog-lfc
 ```
 
