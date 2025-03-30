@@ -34,9 +34,13 @@ A lightweight, modular log processor with flow-based configuration.
 1. Clone the repository:
 ```bash
 git clone https://github.com/rsyslog/pysyslog-lfc.git
-cd pysyslog-lfc
+
 ```
 
+```bash
+
+cd pysyslog-lfc
+```
 2. Run the installation script:
 ```bash
 sudo ./install.sh
