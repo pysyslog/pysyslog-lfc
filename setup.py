@@ -14,8 +14,7 @@ setup(
         ]
     },
     install_requires=[
-        "systemd-python>=235",
-        "configparser>=5.0.0",
+        "configparser>=5.0.0",  # Only external dependency for config parsing
     ],
     entry_points={
         "console_scripts": [
