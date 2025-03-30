@@ -1,6 +1,7 @@
 [Unit]
 Description=PySyslog LFC - Lightweight Flow-based Log Processor
-After=network.target
+After=network.target syslog.socket
+Requires=syslog.socket
 
 [Service]
 Type=simple
@@ -11,6 +12,12 @@ ExecStart=/usr/bin/pysyslog
 Restart=always
 RestartSec=10
 Environment=PYSYSLOG_CONFIG=/etc/pysyslog/main.ini
+# Add proper permissions for syslog socket
+SupplementaryGroups=systemd-journal
+# Ensure proper socket access
+UMask=0022
+# Add proper capabilities
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target 

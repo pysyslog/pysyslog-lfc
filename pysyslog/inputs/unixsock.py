@@ -49,54 +49,53 @@ class Input(InputComponent):
         return self.SOCKET_PATHS.get(self._distribution, '/dev/log')
     
     def setup(self) -> None:
-        """Setup the Unix socket with proper permissions"""
+        """Set up the Unix socket connection"""
         try:
-            # If the socket already exists, remove it
-            if os.path.exists(self.socket_path):
-                os.unlink(self.socket_path)
+            # Check if socket exists and is accessible
+            if not os.path.exists(self.socket_path):
+                self.logger.error(f"Socket path does not exist: {self.socket_path}")
+                raise RuntimeError(f"Socket path does not exist: {self.socket_path}")
+            
+            # Check socket permissions
+            socket_mode = os.stat(self.socket_path).st_mode
+            if not socket.S_ISSOCK(socket_mode):
+                self.logger.error(f"Path is not a socket: {self.socket_path}")
+                raise RuntimeError(f"Path is not a socket: {self.socket_path}")
             
             # Create Unix domain socket
             self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-            self.socket.bind(self.socket_path)
             
-            # Set secure permissions based on distribution
-            if self._distribution in ['ubuntu', 'debian']:
-                # Debian/Ubuntu typically use systemd-journal group
-                os.chmod(self.socket_path, 0o660)
-                try:
-                    import grp
-                    journal_group = grp.getgrnam('systemd-journal')
-                    os.chown(self.socket_path, -1, journal_group.gr_gid)
-                except KeyError:
-                    self.logger.warning("systemd-journal group not found")
-            else:
-                # Other distributions typically allow all users to write
-                os.chmod(self.socket_path, 0o666)
+            # Set socket options
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.buffer_size)
             
-            self.logger.info(f"Unix socket created at {self.socket_path} with {oct(os.stat(self.socket_path).st_mode)[-3:]} permissions")
+            # Connect to the socket
+            self.socket.connect(self.socket_path)
+            self.logger.info(f"Connected to Unix socket: {self.socket_path}")
+            
         except Exception as e:
-            self.logger.error(f"Error setting up Unix socket: {e}")
+            self.logger.error(f"Failed to set up Unix socket: {str(e)}")
             raise
     
     def read(self) -> Optional[str]:
-        """Read data from the Unix socket with timeout"""
+        """Read data from the Unix socket"""
         try:
-            # Set a timeout to prevent blocking indefinitely
-            self.socket.settimeout(1.0)
+            if not self.socket:
+                self.logger.error("Socket not initialized")
+                return None
+            
             data, _ = self.socket.recvfrom(self.buffer_size)
-            return data.decode('utf-8')
-        except socket.timeout:
-            return None
+            return data.decode('utf-8', errors='replace')
+            
         except Exception as e:
-            self.logger.error(f"Error reading from Unix socket: {e}")
+            self.logger.error(f"Error reading from Unix socket: {str(e)}")
             return None
     
     def close(self) -> None:
-        """Cleanup the Unix socket"""
-        if self.socket:
-            try:
+        """Close the Unix socket connection"""
+        try:
+            if self.socket:
                 self.socket.close()
-                if os.path.exists(self.socket_path):
-                    os.unlink(self.socket_path)
-            except Exception as e:
-                self.logger.error(f"Error closing Unix socket: {e}") 
+                self.socket = None
+                self.logger.info("Closed Unix socket connection")
+        except Exception as e:
+            self.logger.error(f"Error closing Unix socket: {str(e)}") 
