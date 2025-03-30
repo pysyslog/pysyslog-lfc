@@ -1,6 +1,7 @@
 
 [![Pylint](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml/badge.svg)](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml)
 ![Python Versions](https://img.shields.io/badge/python-3.8%20|%203.9%20|%203.10-blue)
+
 [![Last Commit](https://img.shields.io/github/last-commit/pysyslog/pysyslog-lfc.svg)](https://github.com/pysyslog/pysyslog-lfc/commits/main)
 
 
