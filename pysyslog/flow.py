@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List
 from queue import Queue
 from dataclasses import dataclass
 
-from .components import ComponentRegistry, InputComponent, ParserComponent, OutputComponent
+from .components import ComponentRegistry, InputComponent, ParserComponent, OutputComponent, FilterComponent
 
 @dataclass
 class FlowConfig:
@@ -19,6 +19,7 @@ class FlowConfig:
     parser_config: Dict[str, Any]
     output_type: str
     output_config: Dict[str, Any]
+    filters: List[Dict[str, Any]]
 
 class Flow:
     """Represents a log processing flow"""
@@ -35,6 +36,7 @@ class Flow:
         self.input = self._create_input()
         self.parser = self._create_parser()
         self.output = self._create_output()
+        self.filters = self._create_filters()
         
         # Setup queues
         self.input_queue = Queue()
@@ -49,6 +51,7 @@ class Flow:
         input_config = {}
         parser_config = {}
         output_config = {}
+        filters = []
         
         for key, value in config.items():
             if key.startswith("input."):
@@ -57,6 +60,14 @@ class Flow:
                 parser_config[key[7:]] = value
             elif key.startswith("output."):
                 output_config[key[7:]] = value
+            elif key.startswith("filter."):
+                # Parse filter configuration
+                filter_parts = key[7:].split(".")
+                if len(filter_parts) == 2:
+                    filter_index = int(filter_parts[0])
+                    while len(filters) <= filter_index:
+                        filters.append({})
+                    filters[filter_index][filter_parts[1]] = value
         
         return FlowConfig(
             input_type=input_config.pop("type"),
@@ -64,7 +75,8 @@ class Flow:
             parser_type=parser_config.pop("type"),
             parser_config=parser_config,
             output_type=output_config.pop("type"),
-            output_config=output_config
+            output_config=output_config,
+            filters=filters
         )
     
     def _create_input(self) -> InputComponent:
@@ -87,6 +99,21 @@ class Flow:
             self.config.output_type,
             self.config.output_config
         )
+    
+    def _create_filters(self) -> List[FilterComponent]:
+        """Create filter components"""
+        filters = []
+        for filter_config in self.config.filters:
+            if not filter_config:
+                continue
+            filter_type = filter_config.pop("type")
+            filters.append(
+                self.registry.create_filter(
+                    filter_type,
+                    filter_config
+                )
+            )
+        return filters
     
     def start(self) -> None:
         """Start the flow processing"""
@@ -139,6 +166,8 @@ class Flow:
         self.input.close()
         self.parser.close()
         self.output.close()
+        for filter_component in self.filters:
+            filter_component.close()
     
     def _input_loop(self) -> None:
         """Input processing loop"""
@@ -157,7 +186,15 @@ class Flow:
                 data = self.input_queue.get(timeout=1)
                 parsed = self.parser.parse(data)
                 if parsed:
-                    self.output_queue.put(parsed)
+                    # Apply filters
+                    should_output = True
+                    for filter_component in self.filters:
+                        if not filter_component.filter(parsed):
+                            should_output = False
+                            break
+                    
+                    if should_output:
+                        self.output_queue.put(parsed)
             except Queue.Empty:
                 continue
             except Exception as e:

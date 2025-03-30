@@ -5,7 +5,7 @@ Component management for PySyslog LFC
 import logging
 import importlib
 import pkgutil
-from typing import Dict, Any, Type, Optional
+from typing import Dict, Any, Type, Optional, List
 from abc import ABC, abstractmethod
 
 class BaseComponent(ABC):
@@ -36,6 +36,21 @@ class ParserComponent(BaseComponent):
         """Parse input data into structured format"""
         pass
 
+class FilterComponent(BaseComponent):
+    """Base class for filter components"""
+    
+    @abstractmethod
+    def filter(self, data: Dict[str, Any]) -> bool:
+        """Filter parsed data
+        
+        Args:
+            data: Parsed message data
+            
+        Returns:
+            bool: True if message should be kept, False if filtered out
+        """
+        pass
+
 class OutputComponent(BaseComponent):
     """Base class for output components"""
     
@@ -50,6 +65,7 @@ class ComponentRegistry:
     def __init__(self):
         self.input_types: Dict[str, Type[InputComponent]] = {}
         self.parser_types: Dict[str, Type[ParserComponent]] = {}
+        self.filter_types: Dict[str, Type[FilterComponent]] = {}
         self.output_types: Dict[str, Type[OutputComponent]] = {}
         self._load_components()
     
@@ -66,6 +82,12 @@ class ComponentRegistry:
             module = importlib.import_module(f"pysyslog.parser.{name}")
             if hasattr(module, "Parser"):
                 self.parser_types[name] = module.Parser
+        
+        # Load filter components
+        for _, name, _ in pkgutil.iter_modules(["pysyslog.filters"]):
+            module = importlib.import_module(f"pysyslog.filters.{name}")
+            if hasattr(module, "Filter"):
+                self.filter_types[name] = module.Filter
         
         # Load output components
         for _, name, _ in pkgutil.iter_modules(["pysyslog.output"]):
@@ -84,6 +106,12 @@ class ComponentRegistry:
         if type_name not in self.parser_types:
             raise ValueError(f"Unknown parser type: {type_name}")
         return self.parser_types[type_name](config)
+    
+    def create_filter(self, type_name: str, config: Dict[str, Any]) -> FilterComponent:
+        """Create a filter component"""
+        if type_name not in self.filter_types:
+            raise ValueError(f"Unknown filter type: {type_name}")
+        return self.filter_types[type_name](config)
     
     def create_output(self, type_name: str, config: Dict[str, Any]) -> OutputComponent:
         """Create an output component"""
