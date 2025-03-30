@@ -45,13 +45,19 @@ sudo ./install.sh
 #### Windows
 
 1. Clone the repository:
+
 ```cmd
 
 git clone https://github.com/pysyslog/pysyslog-lfc.git
 
-cd pysyslog-lfc
+
 ```
 
+```cmd
+
+
+cd pysyslog-lfc
+```
 2. Run the installation script as administrator:
 ```cmd
 install.bat
