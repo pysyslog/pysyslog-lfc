@@ -1,15 +1,9 @@
-<div align="center">
-  <img src="https://github.com/allamiro/PySyslog/assets/279790/258b8399-356d-48d0-9338-99fdf0502de9" alt="PySyslog Logo" width="300">
-</div>
-
 # PySyslog LFC
 
-A lightweight, modular log processor with flow-based configuration, built entirely in Python.
-
-
+A lightweight, modular log processor with flow-based configuration.
 
 ## Features
-- **Python-powered** core for flexibility and extensibility
+
 - Flow-based log processing model
 - Dynamic component loading
 - Support for various input sources (Unix socket, file, flow chaining)
@@ -20,6 +14,12 @@ A lightweight, modular log processor with flow-based configuration, built entire
 - Clean, modern design without legacy syslog terminology
 
 ## Installation
+
+### Quick Install (Using pip)
+
+```bash
+sudo pip3 install pysyslog-lfc
+```
 
 ### Manual Installation
 
@@ -33,7 +33,7 @@ A lightweight, modular log processor with flow-based configuration, built entire
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/pysyslog/pysyslog-lfc.git
+git clone https://github.com/rsyslog/pysyslog-lfc.git
 cd pysyslog-lfc
 ```
 
@@ -46,7 +46,7 @@ sudo ./install.sh
 
 1. Clone the repository:
 ```cmd
-git clone https://github.com/pysyslog/pysyslog-lfc.git
+git clone https://github.com/rsyslog/pysyslog-lfc.git
 cd pysyslog-lfc
 ```
 
@@ -59,7 +59,7 @@ install.bat
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/pysyslog/pysyslog-lfc.git
+git clone https://github.com/rsyslog/pysyslog-lfc.git
 cd pysyslog-lfc
 ```
 
@@ -163,9 +163,9 @@ pysyslog-lfc/
 │       ├── config.py
 │       ├── flow.py
 │       ├── components.py
-│       ├── input/
-│       ├── parser/
-│       └── output/
+│       ├── inputs/         # Input components
+│       ├── parsers/        # Parser components
+│       └── outputs/        # Output components
 ├── install.sh             # Linux/macOS installation script
 ├── install.bat            # Windows installation script
 ├── requirements.txt       # Python dependencies
@@ -174,7 +174,10 @@ pysyslog-lfc/
 
 ### Adding New Components
 
-1. Create a new component file in the appropriate directory (`input/`, `parser/`, or `output/`)
+1. Create a new component file in the appropriate directory:
+   - `inputs/` for input components
+   - `parsers/` for parser components
+   - `outputs/` for output components
 2. Implement the required interface
 3. Add the component to the `components` list in `main.ini`
 
