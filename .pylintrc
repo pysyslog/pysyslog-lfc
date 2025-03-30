@@ -1,0 +1,32 @@
+[MASTER]
+ignore=venv,.venv,env
+jobs=1
+extension-pkg-whitelist=
+
+[MESSAGES CONTROL]
+disable=
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+    R0801,  # duplicate-code
+
+[REPORTS]
+output-format = text
+score = yes
+fail-under = 4.0
+
+[BASIC]
+good-names=i,j,k,ex,Run,_
+max-line-length=100
+
+[FORMAT]
+indent-string='    '
+max-module-lines=1000
+
+[DESIGN]
+max-args=10
+max-attributes=10
+max-branches=15
+max-locals=20
+max-returns=6
+max-statements=50
