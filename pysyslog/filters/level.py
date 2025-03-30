@@ -2,88 +2,108 @@
 Level filter component for PySyslog LFC
 """
 
-from typing import Dict, Any, List, Optional
-from ..components import FilterComponent
+import logging
+from typing import Dict, Any, Set
+from .base import FilterComponent
 
 class Filter(FilterComponent):
-    """Level filter component"""
+    """Filter messages based on log levels.
     
-    # Standard log levels
+    This filter allows matching message fields against standard log levels
+    and syslog severity levels. It supports case-insensitive matching and
+    can invert the match result.
+    
+    Configuration:
+        - levels: List of levels to match (required)
+        - field: Field to match against (default: "level")
+        - invert: Whether to invert the match (default: False)
+    """
+    
+    # Standard log levels with numeric values
     STANDARD_LEVELS = {
-        "DEBUG": 10,
-        "INFO": 20,
-        "WARNING": 30,
-        "ERROR": 40,
-        "CRITICAL": 50
+        "debug": 10,
+        "info": 20,
+        "warning": 30,
+        "error": 40,
+        "critical": 50
     }
     
-    # Syslog levels
+    # Syslog severity levels with numeric values
     SYSLOG_LEVELS = {
-        "EMERG": 0,
-        "ALERT": 1,
-        "CRIT": 2,
-        "ERR": 3,
-        "WARNING": 4,
-        "NOTICE": 5,
-        "INFO": 6,
-        "DEBUG": 7
+        "emerg": 0,
+        "alert": 1,
+        "crit": 2,
+        "err": 3,
+        "warning": 4,
+        "notice": 5,
+        "info": 6,
+        "debug": 7
     }
     
     def __init__(self, config: Dict[str, Any]):
+        """Initialize level filter.
+        
+        Args:
+            config: Configuration dictionary containing:
+                - levels: List of levels to match
+                - field: Field to match against (default: "level")
+                - invert: Whether to invert the match (default: False)
+                
+        Raises:
+            ValueError: If configuration is invalid
+        """
         super().__init__(config)
-        self.levels = config.get("levels", "").split(",")
+        
+        # Get and validate levels
+        levels = config.get("levels", [])
+        if not levels:
+            raise ValueError("levels parameter is required")
+        self._validate_list(levels, "levels")
+        
+        # Convert levels to lowercase and validate
+        self.levels: Set[str] = {level.lower() for level in levels}
+        valid_levels = set(self.STANDARD_LEVELS.keys()) | set(self.SYSLOG_LEVELS.keys())
+        invalid_levels = self.levels - valid_levels
+        if invalid_levels:
+            raise ValueError(f"Invalid levels: {', '.join(invalid_levels)}")
+        
+        # Get and validate field
         self.field = config.get("field", "level")
-        self.invert = config.get("invert", False)
-        
-        if not self.levels or not self.levels[0]:
-            raise ValueError("Levels are required for level filter")
-        
-        # Convert level names to values
-        self.level_values = set()
-        for level in self.levels:
-            level = level.strip().upper()
-            if level in self.STANDARD_LEVELS:
-                self.level_values.add(self.STANDARD_LEVELS[level])
-            elif level in self.SYSLOG_LEVELS:
-                self.level_values.add(self.SYSLOG_LEVELS[level])
-            else:
-                raise ValueError(f"Unknown log level: {level}")
+        self._validate_string(self.field, "field")
     
     def filter(self, data: Dict[str, Any]) -> bool:
-        """Filter messages based on log level
+        """Filter messages based on log level.
         
         Args:
             data: Parsed message data
             
         Returns:
-            bool: True if message level matches (or doesn't match if inverted)
+            bool: True if message should be kept, False if filtered out
         """
         try:
-            # Get level value
-            level = data.get(self.field)
-            if not level:
+            # Get field value
+            field_value = data.get(self.field)
+            if field_value is None:
                 return False
+                
+            # Convert to string and lowercase
+            if not isinstance(field_value, str):
+                field_value = str(field_value)
+            field_value = field_value.lower()
             
-            # Convert level to numeric value
-            if isinstance(level, str):
-                level = level.upper()
-                if level in self.STANDARD_LEVELS:
-                    level = self.STANDARD_LEVELS[level]
-                elif level in self.SYSLOG_LEVELS:
-                    level = self.SYSLOG_LEVELS[level]
-                else:
-                    return False
+            # Check if level matches
+            result = field_value in self.levels
             
-            # Check level match
-            matches = level in self.level_values
-            
-            # Return based on invert setting
-            return not matches if self.invert else matches
+            # Apply invert if specified
+            if self.invert:
+                result = not result
+                
+            return result
             
         except Exception as e:
-            self.logger.error(f"Error filtering message: {e}")
+            self.logger.error(f"Error filtering message: {e}", exc_info=True)
             return False
     
     def close(self) -> None:
-        """Cleanup resources"""
+        """Cleanup resources."""
         pass 

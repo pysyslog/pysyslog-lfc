@@ -1,61 +1,65 @@
 """
-Field filter component for PySyslog LFC
+Hostname filter component for PySyslog LFC
 """
 
 import logging
 import re
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, Union, List
 from .base import FilterComponent
 
 class Filter(FilterComponent):
-    """Filter messages based on field value comparisons.
+    """Filter messages based on hostname comparisons.
     
-    This filter allows comparing message field values against specified values
-    using various operators. It supports string, numeric, and boolean comparisons,
-    with case-sensitive and case-insensitive options for string comparisons.
+    This filter allows comparing hostname field values against specified values
+    using various operators. It supports hostname validation, domain checks,
+    and component-based comparisons.
     
     Configuration:
         - field: Field to compare (required)
-        - operator: Comparison operator (required)
-        - value: Value to compare against (required)
+        - operator: Hostname operator (required)
+        - value: Hostname or hostname component to compare against (required)
+        - component: Hostname component to compare (optional)
         - invert: Whether to invert the match (default: False)
-        - case_sensitive: Whether string comparisons are case sensitive (default: True)
     """
+    
+    # Hostname regex pattern
+    HOSTNAME_PATTERN = re.compile(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$')
     
     # Valid operators and their functions
     OPERATORS = {
-        # String operators
-        "equals": lambda x, y: str(x) == str(y),
-        "not_equals": lambda x, y: str(x) != str(y),
-        "contains": lambda x, y: str(y) in str(x),
-        "not_contains": lambda x, y: str(y) not in str(x),
-        "startswith": lambda x, y: str(x).startswith(str(y)),
-        "endswith": lambda x, y: str(x).endswith(str(y)),
-        "matches": lambda x, y: bool(re.match(str(y), str(x))),
+        # Hostname operators
+        "equals": lambda x, y: x == y,
+        "not_equals": lambda x, y: x != y,
+        "contains": lambda x, y: y in x,
+        "not_contains": lambda x, y: y not in x,
+        "startswith": lambda x, y: x.startswith(y),
+        "endswith": lambda x, y: x.endswith(y),
         
-        # Numeric operators
-        "gt": lambda x, y: float(x) > float(y),
-        "ge": lambda x, y: float(x) >= float(y),
-        "lt": lambda x, y: float(x) < float(y),
-        "le": lambda x, y: float(x) <= float(y),
-        "eq": lambda x, y: float(x) == float(y),
-        "ne": lambda x, y: float(x) != float(y),
+        # Component operators
+        "domain_equals": lambda x, y: x.split(".")[-2:] == y.split("."),
+        "domain_ends_with": lambda x, y: x.endswith(y),
+        "subdomain_equals": lambda x, y: x.split(".")[0] == y,
         
-        # Boolean operators
-        "is_true": lambda x, y: bool(x) is True,
-        "is_false": lambda x, y: bool(x) is False
+        # Validation operators
+        "is_valid": lambda x, y: bool(Filter.HOSTNAME_PATTERN.match(x)),
+        "is_invalid": lambda x, y: not bool(Filter.HOSTNAME_PATTERN.match(x)),
+        
+        # Special operators
+        "is_ipv4": lambda x, y: bool(re.match(r'^(\d{1,3}\.){3}\d{1,3}$', x)),
+        "is_ipv6": lambda x, y: bool(re.match(r'^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$', x)),
+        "is_localhost": lambda x, y: x.lower() in ["localhost", "127.0.0.1", "::1"]
     }
     
     def __init__(self, config: Dict[str, Any]):
-        """Initialize field filter.
+        """Initialize hostname filter.
         
         Args:
             config: Configuration dictionary containing:
                 - field: Field to compare
-                - operator: Comparison operator
-                - value: Value to compare against
+                - operator: Hostname operator
+                - value: Hostname or hostname component to compare against
+                - component: Hostname component to compare (optional)
                 - invert: Whether to invert the match (default: False)
-                - case_sensitive: Whether string comparisons are case sensitive (default: True)
                 
         Raises:
             ValueError: If configuration is invalid
@@ -79,20 +83,18 @@ class Filter(FilterComponent):
         self.value = config.get("value")
         if self.value is None:
             raise ValueError("value parameter is required")
+        self._validate_string(self.value, "value")
         
-        # Get optional parameters
-        self.case_sensitive = bool(config.get("case_sensitive", True))
+        # Validate hostname if needed
+        if self.operator in ["domain_equals", "domain_ends_with", "subdomain_equals"]:
+            if not self.HOSTNAME_PATTERN.match(self.value):
+                raise ValueError(f"Invalid hostname: {self.value}")
         
         # Get operator function
         self._operator_func = self.OPERATORS[self.operator]
-        
-        # Compile regex pattern if needed
-        if self.operator == "matches":
-            self._validate_string(self.value, "value")
-            self.pattern = self._compile_pattern(self.value)
     
     def filter(self, data: Dict[str, Any]) -> bool:
-        """Filter messages based on field value comparison.
+        """Filter messages based on hostname comparison.
         
         Args:
             data: Parsed message data
@@ -105,6 +107,10 @@ class Filter(FilterComponent):
             field_value = data.get(self.field)
             if field_value is None:
                 return False
+            
+            # Convert to string if needed
+            if not isinstance(field_value, str):
+                field_value = str(field_value)
             
             # Apply operator
             result = self._operator_func(field_value, self.value)

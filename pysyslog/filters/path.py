@@ -1,61 +1,67 @@
 """
-Field filter component for PySyslog LFC
+Path filter component for PySyslog LFC
 """
 
 import logging
+import os
 import re
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, Union, List
 from .base import FilterComponent
 
 class Filter(FilterComponent):
-    """Filter messages based on field value comparisons.
+    """Filter messages based on file path comparisons.
     
-    This filter allows comparing message field values against specified values
-    using various operators. It supports string, numeric, and boolean comparisons,
-    with case-sensitive and case-insensitive options for string comparisons.
+    This filter allows comparing file path field values against specified values
+    using various operators. It supports path validation, component checks,
+    and file system operations.
     
     Configuration:
         - field: Field to compare (required)
-        - operator: Comparison operator (required)
-        - value: Value to compare against (required)
+        - operator: Path operator (required)
+        - value: Path or path component to compare against (required)
+        - component: Path component to compare (optional)
         - invert: Whether to invert the match (default: False)
-        - case_sensitive: Whether string comparisons are case sensitive (default: True)
     """
+    
+    # Path regex pattern
+    PATH_PATTERN = re.compile(r'^[a-zA-Z0-9\-_\./\\]+$')
     
     # Valid operators and their functions
     OPERATORS = {
-        # String operators
-        "equals": lambda x, y: str(x) == str(y),
-        "not_equals": lambda x, y: str(x) != str(y),
-        "contains": lambda x, y: str(y) in str(x),
-        "not_contains": lambda x, y: str(y) not in str(x),
-        "startswith": lambda x, y: str(x).startswith(str(y)),
-        "endswith": lambda x, y: str(x).endswith(str(y)),
-        "matches": lambda x, y: bool(re.match(str(y), str(x))),
+        # Path operators
+        "equals": lambda x, y: x == y,
+        "not_equals": lambda x, y: x != y,
+        "contains": lambda x, y: y in x,
+        "not_contains": lambda x, y: y not in x,
+        "startswith": lambda x, y: x.startswith(y),
+        "endswith": lambda x, y: x.endswith(y),
         
-        # Numeric operators
-        "gt": lambda x, y: float(x) > float(y),
-        "ge": lambda x, y: float(x) >= float(y),
-        "lt": lambda x, y: float(x) < float(y),
-        "le": lambda x, y: float(x) <= float(y),
-        "eq": lambda x, y: float(x) == float(y),
-        "ne": lambda x, y: float(x) != float(y),
+        # Component operators
+        "dirname_equals": lambda x, y: os.path.dirname(x) == y,
+        "basename_equals": lambda x, y: os.path.basename(x) == y,
+        "extension_equals": lambda x, y: os.path.splitext(x)[1] == y,
         
-        # Boolean operators
-        "is_true": lambda x, y: bool(x) is True,
-        "is_false": lambda x, y: bool(x) is False
+        # Validation operators
+        "is_valid": lambda x, y: bool(Filter.PATH_PATTERN.match(x)),
+        "is_invalid": lambda x, y: not bool(Filter.PATH_PATTERN.match(x)),
+        
+        # Special operators
+        "is_absolute": lambda x, y: os.path.isabs(x),
+        "is_relative": lambda x, y: not os.path.isabs(x),
+        "has_extension": lambda x, y: bool(os.path.splitext(x)[1]),
+        "no_extension": lambda x, y: not bool(os.path.splitext(x)[1])
     }
     
     def __init__(self, config: Dict[str, Any]):
-        """Initialize field filter.
+        """Initialize path filter.
         
         Args:
             config: Configuration dictionary containing:
                 - field: Field to compare
-                - operator: Comparison operator
-                - value: Value to compare against
+                - operator: Path operator
+                - value: Path or path component to compare against
+                - component: Path component to compare (optional)
                 - invert: Whether to invert the match (default: False)
-                - case_sensitive: Whether string comparisons are case sensitive (default: True)
                 
         Raises:
             ValueError: If configuration is invalid
@@ -79,20 +85,18 @@ class Filter(FilterComponent):
         self.value = config.get("value")
         if self.value is None:
             raise ValueError("value parameter is required")
+        self._validate_string(self.value, "value")
         
-        # Get optional parameters
-        self.case_sensitive = bool(config.get("case_sensitive", True))
+        # Validate path if needed
+        if self.operator in ["dirname_equals", "basename_equals", "extension_equals"]:
+            if not self.PATH_PATTERN.match(self.value):
+                raise ValueError(f"Invalid path: {self.value}")
         
         # Get operator function
         self._operator_func = self.OPERATORS[self.operator]
-        
-        # Compile regex pattern if needed
-        if self.operator == "matches":
-            self._validate_string(self.value, "value")
-            self.pattern = self._compile_pattern(self.value)
     
     def filter(self, data: Dict[str, Any]) -> bool:
-        """Filter messages based on field value comparison.
+        """Filter messages based on path comparison.
         
         Args:
             data: Parsed message data
@@ -105,6 +109,10 @@ class Filter(FilterComponent):
             field_value = data.get(self.field)
             if field_value is None:
                 return False
+            
+            # Convert to string if needed
+            if not isinstance(field_value, str):
+                field_value = str(field_value)
             
             # Apply operator
             result = self._operator_func(field_value, self.value)

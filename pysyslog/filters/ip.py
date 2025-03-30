@@ -1,61 +1,48 @@
 """
-Field filter component for PySyslog LFC
+IP address filter component for PySyslog LFC
 """
 
 import logging
-import re
-from typing import Dict, Any, Callable
+import ipaddress
+from typing import Dict, Any, Callable, Union, List
 from .base import FilterComponent
 
 class Filter(FilterComponent):
-    """Filter messages based on field value comparisons.
+    """Filter messages based on IP address comparisons.
     
-    This filter allows comparing message field values against specified values
-    using various operators. It supports string, numeric, and boolean comparisons,
-    with case-sensitive and case-insensitive options for string comparisons.
+    This filter allows comparing IP address field values against specified values
+    using various operators. It supports IPv4 and IPv6 addresses, CIDR ranges,
+    and network membership checks.
     
     Configuration:
         - field: Field to compare (required)
-        - operator: Comparison operator (required)
-        - value: Value to compare against (required)
+        - operator: IP address operator (required)
+        - value: IP address or CIDR range to compare against (required)
         - invert: Whether to invert the match (default: False)
-        - case_sensitive: Whether string comparisons are case sensitive (default: True)
     """
     
     # Valid operators and their functions
     OPERATORS = {
-        # String operators
-        "equals": lambda x, y: str(x) == str(y),
-        "not_equals": lambda x, y: str(x) != str(y),
-        "contains": lambda x, y: str(y) in str(x),
-        "not_contains": lambda x, y: str(y) not in str(x),
-        "startswith": lambda x, y: str(x).startswith(str(y)),
-        "endswith": lambda x, y: str(x).endswith(str(y)),
-        "matches": lambda x, y: bool(re.match(str(y), str(x))),
-        
-        # Numeric operators
-        "gt": lambda x, y: float(x) > float(y),
-        "ge": lambda x, y: float(x) >= float(y),
-        "lt": lambda x, y: float(x) < float(y),
-        "le": lambda x, y: float(x) <= float(y),
-        "eq": lambda x, y: float(x) == float(y),
-        "ne": lambda x, y: float(x) != float(y),
-        
-        # Boolean operators
-        "is_true": lambda x, y: bool(x) is True,
-        "is_false": lambda x, y: bool(x) is False
+        "equals": lambda x, y: x == y,
+        "not_equals": lambda x, y: x != y,
+        "in_network": lambda x, y: x in y,
+        "not_in_network": lambda x, y: x not in y,
+        "is_private": lambda x, y: x.is_private,
+        "is_global": lambda x, y: x.is_global,
+        "is_multicast": lambda x, y: x.is_multicast,
+        "is_loopback": lambda x, y: x.is_loopback,
+        "is_link_local": lambda x, y: x.is_link_local
     }
     
     def __init__(self, config: Dict[str, Any]):
-        """Initialize field filter.
+        """Initialize IP address filter.
         
         Args:
             config: Configuration dictionary containing:
                 - field: Field to compare
-                - operator: Comparison operator
-                - value: Value to compare against
+                - operator: IP address operator
+                - value: IP address or CIDR range to compare against
                 - invert: Whether to invert the match (default: False)
-                - case_sensitive: Whether string comparisons are case sensitive (default: True)
                 
         Raises:
             ValueError: If configuration is invalid
@@ -79,20 +66,24 @@ class Filter(FilterComponent):
         self.value = config.get("value")
         if self.value is None:
             raise ValueError("value parameter is required")
-        
-        # Get optional parameters
-        self.case_sensitive = bool(config.get("case_sensitive", True))
+            
+        # Parse value based on operator
+        if self.operator in ["in_network", "not_in_network"]:
+            try:
+                self.value = ipaddress.ip_network(self.value)
+            except ValueError as e:
+                raise ValueError(f"Invalid CIDR range: {e}")
+        else:
+            try:
+                self.value = ipaddress.ip_address(self.value)
+            except ValueError as e:
+                raise ValueError(f"Invalid IP address: {e}")
         
         # Get operator function
         self._operator_func = self.OPERATORS[self.operator]
-        
-        # Compile regex pattern if needed
-        if self.operator == "matches":
-            self._validate_string(self.value, "value")
-            self.pattern = self._compile_pattern(self.value)
     
     def filter(self, data: Dict[str, Any]) -> bool:
-        """Filter messages based on field value comparison.
+        """Filter messages based on IP address comparison.
         
         Args:
             data: Parsed message data
@@ -104,6 +95,12 @@ class Filter(FilterComponent):
             # Get field value
             field_value = data.get(self.field)
             if field_value is None:
+                return False
+            
+            # Convert to IP address
+            try:
+                field_value = ipaddress.ip_address(field_value)
+            except ValueError:
                 return False
             
             # Apply operator

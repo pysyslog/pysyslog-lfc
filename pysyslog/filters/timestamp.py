@@ -4,61 +4,89 @@ Timestamp filter component for PySyslog LFC
 
 import logging
 from datetime import datetime
-from typing import Dict, Any, Union
+from typing import Dict, Any, Callable, List, Tuple
 from .base import FilterComponent
 
 class Filter(FilterComponent):
-    """Filter messages based on timestamp field values"""
+    """Filter messages based on timestamp comparisons.
+    
+    This filter allows comparing timestamp field values against specified values
+    using various operators. It supports date and time comparisons with proper
+    format validation and conversion.
+    
+    Configuration:
+        - field: Field to compare (required)
+        - operator: Comparison operator (required)
+        - value: Timestamp value(s) to compare against (required)
+        - format: Timestamp format string (default: "%Y-%m-%d %H:%M:%S")
+        - invert: Whether to invert the match (default: False)
+    """
+    
+    # Valid operators and their functions
+    OPERATORS = {
+        "before": lambda x, y: x < y,
+        "after": lambda x, y: x > y,
+        "between": lambda x, y: y[0] <= x <= y[1],
+        "equals": lambda x, y: x == y
+    }
     
     def __init__(self, config: Dict[str, Any]):
+        """Initialize timestamp filter.
+        
+        Args:
+            config: Configuration dictionary containing:
+                - field: Field to compare
+                - operator: Comparison operator
+                - value: Timestamp value(s) to compare against
+                - format: Timestamp format string (default: "%Y-%m-%d %H:%M:%S")
+                - invert: Whether to invert the match (default: False)
+                
+        Raises:
+            ValueError: If configuration is invalid
+        """
         super().__init__(config)
         
-        # Required parameters
+        # Get and validate field
         self.field = config.get("field")
         if not self.field:
             raise ValueError("field parameter is required")
-            
+        self._validate_string(self.field, "field")
+        
+        # Get and validate operator
         self.operator = config.get("operator")
         if not self.operator:
             raise ValueError("operator parameter is required")
-            
+        if self.operator not in self.OPERATORS:
+            raise ValueError(f"Invalid operator: {self.operator}. Must be one of: {', '.join(self.OPERATORS.keys())}")
+        
+        # Get and validate format
+        self.format = config.get("format", "%Y-%m-%d %H:%M:%S")
+        self._validate_string(self.format, "format")
+        
+        # Get and validate value
         self.value = config.get("value")
         if not self.value:
             raise ValueError("value parameter is required")
             
-        # Optional parameters
-        self.invert = config.get("invert", False)
-        self.format = config.get("format", "%Y-%m-%d %H:%M:%S")
+        # Parse value based on operator
+        if self.operator == "between":
+            if not isinstance(self.value, list) or len(self.value) != 2:
+                raise ValueError("Value must be a list of two timestamps for 'between' operator")
+            self._validate_list(self.value, "value")
+            self.value = [
+                self._convert_to_datetime(self.value[0], self.format),
+                self._convert_to_datetime(self.value[1], self.format)
+            ]
+            if self.value[0] > self.value[1]:
+                raise ValueError("Invalid date range: start date must be before end date")
+        else:
+            self.value = self._convert_to_datetime(self.value, self.format)
         
-        # Validate operator
-        valid_operators = {
-            "before": self._before,
-            "after": self._after,
-            "between": self._between,
-            "equals": self._equals
-        }
-        
-        if self.operator not in valid_operators:
-            raise ValueError(f"Invalid operator: {self.operator}. Must be one of: {', '.join(valid_operators.keys())}")
-            
-        self._operator_func = valid_operators[self.operator]
-        
-        # Parse timestamp value(s)
-        try:
-            if self.operator == "between":
-                if not isinstance(self.value, list) or len(self.value) != 2:
-                    raise ValueError("Value must be a list of two timestamps for 'between' operator")
-                self.value = [
-                    datetime.strptime(self.value[0], self.format),
-                    datetime.strptime(self.value[1], self.format)
-                ]
-            else:
-                self.value = datetime.strptime(self.value, self.format)
-        except ValueError as e:
-            raise ValueError(f"Invalid timestamp format: {e}")
+        # Get operator function
+        self._operator_func = self.OPERATORS[self.operator]
     
     def filter(self, data: Dict[str, Any]) -> bool:
-        """Filter messages based on timestamp field value
+        """Filter messages based on timestamp comparison.
         
         Args:
             data: Parsed message data
@@ -71,15 +99,15 @@ class Filter(FilterComponent):
             field_value = data.get(self.field)
             if field_value is None:
                 return False
-                
-            # Parse timestamp
+            
+            # Convert to datetime
             try:
-                timestamp = datetime.strptime(field_value, self.format)
+                field_value = self._convert_to_datetime(field_value, self.format)
             except ValueError:
                 return False
             
             # Apply operator
-            result = self._operator_func(timestamp)
+            result = self._operator_func(field_value, self.value)
             
             # Apply invert if specified
             if self.invert:
@@ -91,22 +119,6 @@ class Filter(FilterComponent):
             self.logger.error(f"Error filtering message: {e}", exc_info=True)
             return False
     
-    def _before(self, timestamp: datetime) -> bool:
-        """Before specified timestamp"""
-        return timestamp < self.value
-    
-    def _after(self, timestamp: datetime) -> bool:
-        """After specified timestamp"""
-        return timestamp > self.value
-    
-    def _between(self, timestamp: datetime) -> bool:
-        """Between two timestamps (inclusive)"""
-        return self.value[0] <= timestamp <= self.value[1]
-    
-    def _equals(self, timestamp: datetime) -> bool:
-        """Equals specified timestamp"""
-        return timestamp == self.value
-    
     def close(self) -> None:
-        """Cleanup resources"""
+        """Cleanup resources."""
         pass 
