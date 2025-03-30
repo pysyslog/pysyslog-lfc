@@ -15,12 +15,6 @@ A lightweight, modular log processor with flow-based configuration.
 
 ## Installation
 
-### Quick Install (Using pip)
-
-```bash
-sudo pip3 install pysyslog-lfc
-```
-
 ### Manual Installation
 
 #### Prerequisites
