@@ -170,6 +170,7 @@ pysyslog-lfc/
 
 1. Create a new component file in the appropriate directory:
    - `inputs/` for input components
+   - `filters/` for filter components
    - `parsers/` for parser components
    - `outputs/` for output components
 2. Implement the required interface
