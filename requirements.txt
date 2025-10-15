@@ -1,3 +1,4 @@
-configparser>=5.0.0
-watchdog>=2.1.0
-python-json-logger>=2.0.0 
+# Core runtime does not require external dependencies beyond the Python standard library.
+# This file lists optional tooling used for development and testing.
+pytest>=7
+pytest-asyncio>=0.21
