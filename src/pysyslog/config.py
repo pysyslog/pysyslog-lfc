@@ -103,8 +103,16 @@ class ConfigLoader:
     def _load_includes(self, parser: configparser.ConfigParser, root_dir: Path) -> None:
         if parser.has_section("use") and parser.has_option("use", "include"):
             pattern = parser.get("use", "include")
-            for include in sorted(root_dir.glob(pattern)):
-                parser.read(include)
+            # Handle absolute paths by converting to relative pattern
+            if pattern.startswith("/"):
+                # Absolute path - use it directly
+                from glob import glob
+                for include in sorted(glob(pattern)):
+                    parser.read(include)
+            else:
+                # Relative pattern - use root_dir
+                for include in sorted(root_dir.glob(pattern)):
+                    parser.read(include)
 
     def _parse(self, parser: configparser.ConfigParser) -> RuntimeConfig:
         channels = self._parse_channels(parser)

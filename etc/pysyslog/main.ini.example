@@ -1,0 +1,44 @@
+[settings]
+log_level = INFO
+
+[use]
+# Note: Only components that are currently implemented are listed below
+# Uncomment and implement additional components as needed
+components = input.memory, parser.json, parser.text, output.stdout, output.memory, filter.field, format.json, format.text
+
+# Uncomment to include additional config files
+# include = conf.d/*.ini
+
+# Example flow using memory input (for testing/demo)
+[flow.demo]
+input.type = memory
+parser.type = json
+output.type = stdout
+output.format = json
+
+# Example flow with text parser and filtering
+[flow.filtered]
+input.type = memory
+parser.type = text
+filter.info.type = field
+filter.info.field = message
+filter.info.op = contains
+filter.info.value = ERROR
+filter.info.stage = parser
+output.type = stdout
+output.format = text
+format.template = ERROR: {message}
+
+# Example flow with channel for reliability
+[flow.reliable]
+input.type = memory
+parser.type = json
+output.type = stdout
+output.format = json
+channel = reliable_queue
+
+[channel.reliable_queue]
+maxsize = 1000
+ack_timeout = 30.0
+retry_limit = 3
+
