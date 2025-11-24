@@ -125,14 +125,17 @@ For quick testing without system installation:
 # 1. Install in development mode (no sudo needed)
 python3 -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
 pip install -e .
 
-# 2. Test with example configuration
-python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
-
-# Or run the test script
+# 2. Run the test script to verify everything works
 python3 test_example_config.py
+
+# 3. Test with example configuration (runs in foreground, press Ctrl+C to stop)
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
 ```
+
+**Note:** In development mode, you don't need `/etc/pysyslog/` or systemd. Just use the config files from the repository directly (e.g., `etc/pysyslog/main.ini.example`).
 
 ### Command Line
 

@@ -1,0 +1,416 @@
+Metadata-Version: 2.4
+Name: pysyslog
+Version: 0.2.0
+Summary: Asynchronous, flow-based log processor with reliable channels
+Author-email: PySyslog Team <support@pysyslog.org>
+License: MIT License
+        
+        Copyright (c) 2025 pysyslog
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Topic :: System :: Logging
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: test
+Requires-Dist: pytest>=7; extra == "test"
+Requires-Dist: pytest-asyncio>=0.21; extra == "test"
+Dynamic: license-file
+
+
+[![Pylint](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml/badge.svg)](https://github.com/pysyslog/pysyslog-lfc/actions/workflows/pylint.yml)
+![Python Versions](https://img.shields.io/badge/python-3.8%20|%203.9%20|%203.10-blue)
+
+
+
+# PySyslog LFC
+
+A lightweight, modular log processor with flow-based configuration.
+
+## Features
+
+- Flow-based log processing model
+- Dynamic component loading
+- Support for various input sources (Unix socket, file, flow chaining)
+- Multiple parser types (RFC 3164, regex, passthrough)
+- Flexible output options (file, TCP, memory for flow chaining)
+- JSON-formatted logs
+- Systemd service integration
+- Clean, modern design without legacy syslog terminology
+
+## Installation
+
+### Manual Installation
+
+#### Prerequisites
+
+- Python 3.8 or higher
+- pip3
+- git
+
+#### Linux/macOS
+
+1. Clone the repository:
+```bash
+git clone https://github.com/pysyslog/pysyslog-lfc.git
+
+```
+
+```bash
+
+cd pysyslog-lfc
+```
+2. Run the installation script:
+```bash
+sudo ./install.sh
+```
+
+#### Windows
+
+1. Clone the repository:
+
+```cmd
+
+git clone https://github.com/pysyslog/pysyslog-lfc.git
+
+
+```
+
+```cmd
+
+
+cd pysyslog-lfc
+```
+
+2. Run the installation script as administrator:
+```cmd
+install.bat
+```
+
+### Development Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/pysyslog/pysyslog-lfc.git
+cd pysyslog-lfc
+```
+
+2. Create a virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Install in development mode:
+```bash
+pip install -e .
+```
+
+## Configuration
+
+For detailed configuration documentation, see:
+- [Main Configuration](docs/configuration/main.md)
+- [Flow Configuration](docs/configuration/flows.md)
+
+### Important Note About Current Configuration
+
+The default `main.ini` file references components that are not yet implemented (see [MISSING_COMPONENTS.md](MISSING_COMPONENTS.md)). For testing with currently available components, use the example configuration:
+
+```bash
+# After installation, replace the config with the working example
+sudo cp /etc/pysyslog/main.ini /etc/pysyslog/main.ini.backup
+sudo cp etc/pysyslog/main.ini.example /etc/pysyslog/main.ini
+sudo systemctl restart pysyslog
+```
+
+Or use the example config directly when running manually:
+```bash
+pysyslog -c etc/pysyslog/main.ini.example
+```
+
+## Usage
+
+### Quick Start (Testing on Ubuntu)
+
+For quick testing without system installation:
+
+```bash
+# 1. Install in development mode (no sudo needed)
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+
+# 2. Test with example configuration
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
+
+# Or run the test script
+python3 test_example_config.py
+```
+
+### Command Line
+
+Start PySyslog LFC:
+```bash
+# Linux/macOS (system installation)
+sudo pysyslog
+
+# Or specify a custom config file
+sudo pysyslog -c /path/to/config.ini
+
+# Windows
+pysyslog
+```
+
+### Testing the Application
+
+Before deploying to production, test with the example configuration:
+
+```bash
+# 1. Test configuration loading
+python3 -c "import sys; sys.path.insert(0, 'src'); from pysyslog.config import ConfigLoader; loader = ConfigLoader(); config = loader.load('etc/pysyslog/main.ini.example'); print(f'Loaded {len(config.flows)} flows')"
+
+# 2. Run the test script
+python3 test_example_config.py
+
+# 3. Test manually with example config
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
+```
+
+### Service Management
+
+#### Linux (systemd)
+```bash
+sudo systemctl start pysyslog
+sudo systemctl stop pysyslog
+sudo systemctl restart pysyslog
+sudo systemctl status pysyslog
+```
+
+#### macOS (launchd)
+```bash
+sudo launchctl start com.pysyslog
+sudo launchctl stop com.pysyslog
+sudo launchctl unload /Library/LaunchDaemons/com.pysyslog.plist
+sudo launchctl load /Library/LaunchDaemons/com.pysyslog.plist
+```
+
+#### Windows
+```cmd
+net start pysyslog
+net stop pysyslog
+```
+
+### Viewing Logs
+
+#### Linux (systemd service)
+```bash
+# View service logs
+sudo journalctl -u pysyslog -f
+
+# View service status
+sudo systemctl status pysyslog
+
+# View application logs (if configured to write to files)
+sudo tail -f /var/log/pysyslog/*.log
+```
+
+#### Linux (manual run)
+When running manually, logs appear in stdout/stderr. For testing:
+```bash
+# Run with debug logging
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
+```
+
+#### macOS
+```bash
+sudo log show --predicate 'process == "pysyslog"' --last 5m
+```
+
+#### Windows
+```cmd
+Get-EventLog -LogName Application -Source pysyslog
+```
+
+### Troubleshooting
+
+#### Service won't start
+1. Check the configuration file syntax:
+   ```bash
+   python3 -c "import sys; sys.path.insert(0, 'src'); from pysyslog.config import ConfigLoader; ConfigLoader().load('/etc/pysyslog/main.ini')"
+   ```
+
+2. Check service logs:
+   ```bash
+   sudo journalctl -u pysyslog -n 50
+   ```
+
+3. Test configuration manually:
+   ```bash
+   sudo -u pysyslog /usr/bin/pysyslog -c /etc/pysyslog/main.ini --log-level DEBUG
+   ```
+
+#### Configuration errors
+- Ensure all referenced components are implemented (see [MISSING_COMPONENTS.md](MISSING_COMPONENTS.md))
+- Use `main.ini.example` for testing with available components
+- Check that component types match registered components in `components/registry.py`
+
+## Deployment on Ubuntu
+
+### Full System Installation
+
+1. **Prerequisites:**
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y python3 python3-pip python3-dev git
+   ```
+
+2. **Clone and Install:**
+   ```bash
+   git clone https://github.com/pysyslog/pysyslog-lfc.git
+   cd pysyslog-lfc
+   sudo ./install.sh
+   ```
+
+3. **Configure for Testing:**
+   ```bash
+   # Backup original config
+   sudo cp /etc/pysyslog/main.ini /etc/pysyslog/main.ini.original
+   
+   # Use working example config
+   sudo cp etc/pysyslog/main.ini.example /etc/pysyslog/main.ini
+   
+   # Restart service
+   sudo systemctl restart pysyslog
+   
+   # Check status
+   sudo systemctl status pysyslog
+   ```
+
+4. **Verify Installation:**
+   ```bash
+   # Check service is running
+   sudo systemctl status pysyslog
+   
+   # View logs
+   sudo journalctl -u pysyslog -f
+   
+   # Test the executable
+   /usr/bin/pysyslog --help
+   ```
+
+### Development/Testing Installation (No Sudo)
+
+For development and testing without system-wide installation:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/pysyslog/pysyslog-lfc.git
+cd pysyslog-lfc
+
+# 2. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install in development mode
+pip install -e .
+
+# 4. Run tests
+python3 test_example_config.py
+
+# 5. Run with example config
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
+```
+
+## Development
+
+### Project Structure
+
+```
+pysyslog-lfc/
+├── bin/                    # Executable scripts
+├── docs/                   # Documentation
+│   └── configuration/      # Configuration docs
+├── etc/                    # Configuration files
+│   ├── pysyslog/
+│   │   ├── main.ini
+│   │   └── conf.d/
+│   ├── systemd/           # Linux service files
+│   ├── launchd/           # macOS service files
+│   └── windows/           # Windows service files
+├── lib/                    # Python package
+│   └── pysyslog/
+│       ├── __init__.py
+│       ├── main.py
+│       ├── config.py
+│       ├── flow.py
+│       ├── components.py
+│       ├── inputs/         # Input components
+|       ├── filters/        # Filter components
+│       ├── parsers/        # Parser components
+│       └── outputs/        # Output components
+├── install.sh             # Linux/macOS installation script
+├── install.bat            # Windows installation script
+├── requirements.txt       # Python dependencies
+└── setup.py              # Python package setup
+```
+
+### Adding New Components
+
+1. Create a new component file in the appropriate directory:
+   - `src/pysyslog/inputs/` for input components
+   - `src/pysyslog/filters/` for filter components
+   - `src/pysyslog/parsers/` for parser components
+   - `src/pysyslog/outputs/` for output components
+   - `src/pysyslog/formats/` for format components
+
+2. Implement the required interface (inherit from base classes in `components/base.py`)
+
+3. Register the component in `src/pysyslog/components/registry.py`:
+   ```python
+   BUILTIN_INPUTS = {
+       "your_component": "pysyslog.inputs.your_component:YourComponentClass",
+   }
+   ```
+
+4. Update the `__init__.py` in the component's directory to export the class
+
+5. Test your component:
+   ```bash
+   python3 test_example_config.py
+   ```
+
+See [MISSING_COMPONENTS.md](MISSING_COMPONENTS.md) for a list of components that need to be implemented.
+
+## License
+
+MIT License - see LICENSE file for details. 
