@@ -72,7 +72,7 @@ install.bat
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/pyyslog/pysyslog-lfc.git
+git clone https://github.com/pysyslog/pysyslog-lfc.git
 cd pysyslog-lfc
 ```
 
@@ -99,17 +99,68 @@ For detailed configuration documentation, see:
 - [Main Configuration](docs/configuration/main.md)
 - [Flow Configuration](docs/configuration/flows.md)
 
+### Important Note About Current Configuration
+
+The default `main.ini` file references components that are not yet implemented (see [MISSING_COMPONENTS.md](MISSING_COMPONENTS.md)). For testing with currently available components, use the example configuration:
+
+```bash
+# After installation, replace the config with the working example
+sudo cp /etc/pysyslog/main.ini /etc/pysyslog/main.ini.backup
+sudo cp etc/pysyslog/main.ini.example /etc/pysyslog/main.ini
+sudo systemctl restart pysyslog
+```
+
+Or use the example config directly when running manually:
+```bash
+pysyslog -c etc/pysyslog/main.ini.example
+```
+
 ## Usage
+
+### Quick Start (Testing on Ubuntu)
+
+For quick testing without system installation:
+
+```bash
+# 1. Install in development mode (no sudo needed)
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+
+# 2. Test with example configuration
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
+
+# Or run the test script
+python3 test_example_config.py
+```
 
 ### Command Line
 
 Start PySyslog LFC:
 ```bash
-# Linux/macOS
+# Linux/macOS (system installation)
 sudo pysyslog
+
+# Or specify a custom config file
+sudo pysyslog -c /path/to/config.ini
 
 # Windows
 pysyslog
+```
+
+### Testing the Application
+
+Before deploying to production, test with the example configuration:
+
+```bash
+# 1. Test configuration loading
+python3 -c "import sys; sys.path.insert(0, 'src'); from pysyslog.config import ConfigLoader; loader = ConfigLoader(); config = loader.load('etc/pysyslog/main.ini.example'); print(f'Loaded {len(config.flows)} flows')"
+
+# 2. Run the test script
+python3 test_example_config.py
+
+# 3. Test manually with example config
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
 ```
 
 ### Service Management
@@ -138,9 +189,23 @@ net stop pysyslog
 
 ### Viewing Logs
 
-#### Linux
+#### Linux (systemd service)
 ```bash
+# View service logs
 sudo journalctl -u pysyslog -f
+
+# View service status
+sudo systemctl status pysyslog
+
+# View application logs (if configured to write to files)
+sudo tail -f /var/log/pysyslog/*.log
+```
+
+#### Linux (manual run)
+When running manually, logs appear in stdout/stderr. For testing:
+```bash
+# Run with debug logging
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
 ```
 
 #### macOS
@@ -151,6 +216,96 @@ sudo log show --predicate 'process == "pysyslog"' --last 5m
 #### Windows
 ```cmd
 Get-EventLog -LogName Application -Source pysyslog
+```
+
+### Troubleshooting
+
+#### Service won't start
+1. Check the configuration file syntax:
+   ```bash
+   python3 -c "import sys; sys.path.insert(0, 'src'); from pysyslog.config import ConfigLoader; ConfigLoader().load('/etc/pysyslog/main.ini')"
+   ```
+
+2. Check service logs:
+   ```bash
+   sudo journalctl -u pysyslog -n 50
+   ```
+
+3. Test configuration manually:
+   ```bash
+   sudo -u pysyslog /usr/bin/pysyslog -c /etc/pysyslog/main.ini --log-level DEBUG
+   ```
+
+#### Configuration errors
+- Ensure all referenced components are implemented (see [MISSING_COMPONENTS.md](MISSING_COMPONENTS.md))
+- Use `main.ini.example` for testing with available components
+- Check that component types match registered components in `components/registry.py`
+
+## Deployment on Ubuntu
+
+### Full System Installation
+
+1. **Prerequisites:**
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y python3 python3-pip python3-dev git
+   ```
+
+2. **Clone and Install:**
+   ```bash
+   git clone https://github.com/pysyslog/pysyslog-lfc.git
+   cd pysyslog-lfc
+   sudo ./install.sh
+   ```
+
+3. **Configure for Testing:**
+   ```bash
+   # Backup original config
+   sudo cp /etc/pysyslog/main.ini /etc/pysyslog/main.ini.original
+   
+   # Use working example config
+   sudo cp etc/pysyslog/main.ini.example /etc/pysyslog/main.ini
+   
+   # Restart service
+   sudo systemctl restart pysyslog
+   
+   # Check status
+   sudo systemctl status pysyslog
+   ```
+
+4. **Verify Installation:**
+   ```bash
+   # Check service is running
+   sudo systemctl status pysyslog
+   
+   # View logs
+   sudo journalctl -u pysyslog -f
+   
+   # Test the executable
+   /usr/bin/pysyslog --help
+   ```
+
+### Development/Testing Installation (No Sudo)
+
+For development and testing without system-wide installation:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/pysyslog/pysyslog-lfc.git
+cd pysyslog-lfc
+
+# 2. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install in development mode
+pip install -e .
+
+# 4. Run tests
+python3 test_example_config.py
+
+# 5. Run with example config
+python3 -m pysyslog -c etc/pysyslog/main.ini.example --log-level DEBUG
 ```
 
 ## Development
@@ -189,12 +344,29 @@ pysyslog-lfc/
 ### Adding New Components
 
 1. Create a new component file in the appropriate directory:
-   - `inputs/` for input components
-   - `filters/` for filter components
-   - `parsers/` for parser components
-   - `outputs/` for output components
-2. Implement the required interface
-3. Add the component to the `components` list in `main.ini`
+   - `src/pysyslog/inputs/` for input components
+   - `src/pysyslog/filters/` for filter components
+   - `src/pysyslog/parsers/` for parser components
+   - `src/pysyslog/outputs/` for output components
+   - `src/pysyslog/formats/` for format components
+
+2. Implement the required interface (inherit from base classes in `components/base.py`)
+
+3. Register the component in `src/pysyslog/components/registry.py`:
+   ```python
+   BUILTIN_INPUTS = {
+       "your_component": "pysyslog.inputs.your_component:YourComponentClass",
+   }
+   ```
+
+4. Update the `__init__.py` in the component's directory to export the class
+
+5. Test your component:
+   ```bash
+   python3 test_example_config.py
+   ```
+
+See [MISSING_COMPONENTS.md](MISSING_COMPONENTS.md) for a list of components that need to be implemented.
 
 ## License
 
