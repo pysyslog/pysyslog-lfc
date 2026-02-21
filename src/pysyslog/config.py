@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import configparser
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterator, List, Mapping, Optional
+
+
+# Python 3.10+ supports dataclass(slots=...). Keep compatibility with 3.8/3.9.
+_DATACLASS_KW = {"slots": True} if sys.version_info >= (3, 10) else {}
 
 
 class ConfigError(ValueError):
     """Raised when a configuration file cannot be parsed."""
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_KW)
 class ComponentConfig:
     """Runtime description of a component declared in the INI file."""
 
@@ -23,7 +28,7 @@ class ComponentConfig:
         return self.options.get(name, default)
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_KW)
 class FilterConfig:
     """Representation of a filter component in a flow."""
 
@@ -32,7 +37,7 @@ class FilterConfig:
     stage: str = "parser"
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_KW)
 class ChannelConfig:
     """Definition of a reliability queue."""
 
@@ -42,7 +47,7 @@ class ChannelConfig:
     retry_limit: int = 3
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_KW)
 class FlowConfig:
     """Definition of a flow pipeline."""
 
@@ -56,7 +61,7 @@ class FlowConfig:
     filters: List[FilterConfig] = field(default_factory=list)
 
 
-@dataclass(slots=True)
+@dataclass(**_DATACLASS_KW)
 class RuntimeConfig:
     """Root configuration returned by :func:`ConfigLoader.load`."""
 
